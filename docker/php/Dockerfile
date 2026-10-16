@@ -4,6 +4,8 @@ FROM php:8.5-fpm
 # host daemon through the mounted socket (see docs/decisions/0002).
 COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker:cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
+# compose builds lab images through buildx; without it the classic builder fails ("path \"\" not found").
+COPY --from=docker:cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 COPY --from=ghcr.io/mlocati/php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/
