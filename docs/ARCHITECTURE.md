@@ -58,7 +58,11 @@ Unverified email: the callback refuses (redirect `home` with `error`, nothing wr
 Edge case: a known email arriving with a different `google_id` (recycled or second Google account). The callback refuses the login (redirect to `home` with `error`) and writes nothing. Linking by email would let whoever controls that address take over the account, including an admin, and inserting would violate the unique `email` index. An admin has to resolve it manually.
 
 ### Catalog and hints
-_To be written by the Catalog track._
+**Page composition.** `layouts/app.blade.php` (header with app name, `labs.index`, `admin.progress` for `@can('admin')`, POST logout; `public/css/app.css`; highlight.js from cdnjs for `pre code`). `labs.index` renders `labs-index.blade.php`: labs ordered by `sort`, an optional validated `?category` filter, and per-card status (not started / started / completed) read only from the current user's `lab_user` rows (D1). `labs.show` renders the shell `lab.blade.php`, which includes the content partial `labs/{slug}.blade.php`, then Launch, Hints and Flag cards. Viewing the page never touches flags, instances or `lab_user`.
+
+**Hint release rule (D9).** `HintService::due()` reads `config('hints.{slug}')` and releases hint *i* (numbered `n = i + 1` by config position) when `now >= started_at + after` minutes. `nextAt()` is the earliest unreleased time. `labs.hints` returns `{hints: [{n, text}], next_at?}`; no `lab_user` row for the current user gives `{hints: []}`, and `next_at` (ISO 8601) is omitted when all are out. Hint text is never in the page HTML; the clock is `started_at`, set on first launch, so reloads reset nothing.
+
+**Client flow** (`public/js/lab.js`, no build step). Launch POSTs `labs.launch` with the CSRF header, then polls `labs.status` every 2 s showing `pending/starting/ready/failed`. On `ready` it waits about 2.5 s (Traefik pickup) before showing "Open lab" (new tab) with a retry-on-404 note. Hints are fetched from `labs.hints` on load and re-fetched at `next_at` (at most every 30 s while the lab is not launched). The flag form POSTs `labs.flag` via fetch and handles correct, incorrect, 429 and 422.
 
 ### Runtime and flag
 Docker is reached only through `App\Contracts\LabRunner` (`DockerLabRunner`: Symfony Process, argument arrays, slug must exist in `labs`). `InstanceResolver::project()` names the instance (`lab_{slug with - as _}` in phase 3); every cache key below is keyed by that project name.
