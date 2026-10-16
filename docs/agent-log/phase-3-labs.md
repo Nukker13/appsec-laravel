@@ -192,9 +192,9 @@ The improvement is due to lab tests and fixture setup now succeeding.
 
 ---
 
-## Smoke Test (not performed in phase 3)
+## Smoke Test
 
-Smoke tests (docker compose up -d for osci and ssrf) are planned for phase 5 after Traefik is configured and labs_proxy network is created. Phase 3 validates compose syntax only.
+Orchestrator completed smoke test for osci: `curl` through Traefik to `http://osci.labs.localhost` returned 200. The labs_proxy network and Traefik routing are functional as of phase 1.
 
 ---
 
@@ -202,16 +202,29 @@ Smoke tests (docker compose up -d for osci and ssrf) are planned for phase 5 aft
 
 1. **`feat(labs): import lab apps unchanged`**
    - 133 files: all 10 labs + gitignore rules
+   - Docker compose file edits (D10 fix) included in this commit: stopper removed, container_name removed, ports removed, Traefik routing added
    
 2. **`feat(labs): blade content views, css and hint schedule`**
    - 10 Blade views + hints.php config
    - 11 files changed, 319 insertions
+
+3. **`feat(labs): global css`** (later round)
+   - `public/css/app.css` ported from source `views/partials/head.php`
+
+4. **`docs(labs): per-lab docs and architecture section`** (later round)
+   - 10 per-lab markdown files in `docs/labs/{slug}.md`
+   - Updated `docs/ARCHITECTURE.md` with "Labs" section covering compose rules and aliases
+
+5. **`docs: phase-3 labs log corrections`** (later round)
+   - Updated this log to reflect final state, smoke test completion, and missing deliverables
 
 ---
 
 ## Known Issues & Notes
 
 - **Pint style issues in lab code:** Lab files have style violations (concat_space, single_quote, etc.) but are intentionally NOT modified per hard rule: "Never change any file inside `labs/{slug}/` except their `docker/docker-compose.yml`."
+
+- **Build issue (pending owner decision):** `ssrf`, `dom-xss`, `reflect-xss`, and `stored-xss` Dockerfiles reference `composer.lock`, which does not exist in the source repo (was gitignored). Labs will fail to build until lock files are created or Dockerfiles are updated. Documented in each affected `docs/labs/{slug}.md`.
 
 - **Baseline test count improvement:** The test suite shows 97 failed vs baseline 137. This is not a regression; it reflects that more tests now run successfully due to lab infrastructure being in place.
 
@@ -222,14 +235,18 @@ Smoke tests (docker compose up -d for osci and ssrf) are planned for phase 5 aft
 ### Created/Modified
 
 - **Labs:** 133 files imported from source (10 dirs × ~13 files each)
-- **Blade views:** 10 files in `resources/views/labs/`
+- **Blade views:** 10 files in `resources/views/labs/{slug}.blade.php`
 - **Config:** `config/hints.php` (updated with hint schedules)
+- **CSS:** `public/css/app.css` (ported from source)
+- **Lab docs:** 10 files in `docs/labs/{slug}.md` (vulnerability description, containers, flag delivery)
+- **Architecture:** Updated `docs/ARCHITECTURE.md` with Labs section
 - **Gitignore:** Added lab-specific ignore rules
+- **Agent log:** This file
 
 ### Unchanged
 
 - No test files modified
-- App code unchanged (only views/hints config)
+- App code unchanged (only views/hints/css added)
 - No lab code modified (except docker-compose.yml)
 
 ---
