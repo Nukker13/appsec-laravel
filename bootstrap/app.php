@@ -12,7 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // There is no login form: unauthenticated users go home, authenticated users skip `guest` routes to the catalog.
+        $middleware->redirectGuestsTo(fn () => route('home'));
+        $middleware->redirectUsersTo(fn () => route('labs.index'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
