@@ -12,8 +12,12 @@ use App\Models\User;
  */
 class InstanceResolver
 {
+    /**
+     * Compose project name of the instance $user uses for $lab. Phase 3: one shared instance per lab, so $user is unused.
+     * The name is lowercase [a-z0-9_] (valid compose project name) and is the key of every lab:{project}:* cache entry.
+     */
     public function project(User $user, Lab $lab): string
     {
-        throw new \LogicException('not implemented');
+        return 'lab_'.str_replace('-', '_', $lab->slug);
     }
 }

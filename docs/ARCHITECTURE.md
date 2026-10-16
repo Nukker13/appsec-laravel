@@ -21,32 +21,9 @@ Networks: `default` (platform) and `labs_proxy` (fixed name, created by the plat
 
 Browser -> `127.0.0.1:8080` -> nginx -> php-fpm (Laravel, `web` middleware: session, CSRF) -> controller -> models / services. Auth is Google OAuth via Socialite and the session guard (sessions in MySQL). Unauthenticated users are redirected to `home`. Lab pages are reached at `http://{project}.labs.localhost` through Traefik.
 
-## Lab launch sequence (planned, Runtime track)
+## Lab launch sequence
 
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant A as app (Laravel)
-    participant Q as queue worker
-    participant R as Redis
-    participant D as Docker daemon (host)
-    participant T as Traefik
-    B->>A: POST /labs/{slug}/launch
-    A->>R: status = pending
-    A->>Q: dispatch LaunchLab
-    A-->>B: 202 {status: pending}
-    Q->>R: Cache::lock lab:{project}:lock
-    Q->>R: status = starting
-    Q->>D: LabRunner::up (docker compose up -d)
-    D-->>T: container labels (Host rule)
-    Q->>R: FlagService::issue (sha256, TTL) / last_seen
-    Q->>R: status = ready
-    loop poll
-        B->>A: GET /labs/{slug}/status
-        A-->>B: {status, url?}
-    end
-    B->>T: http://{project}.labs.localhost
-```
+See [Runtime and flag](#runtime-and-flag) for the diagram, which matches `LabInstanceController`, `LaunchLab` and `DockerLabRunner`.
 
 ## Trust boundary
 
@@ -84,7 +61,54 @@ Edge case: a known email arriving with a different `google_id` (recycled or seco
 _To be written by the Catalog track._
 
 ### Runtime and flag
-_To be written by the Runtime track (LabRunner, InstanceResolver, FlagService, jobs, reaper)._
+Docker is reached only through `App\Contracts\LabRunner` (`DockerLabRunner`: Symfony Process, argument arrays, slug must exist in `labs`). `InstanceResolver::project()` names the instance (`lab_{slug with - as _}` in phase 3); every cache key below is keyed by that project name.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as LabInstanceController
+    participant Q as LaunchLab (queue)
+    participant R as Cache (Redis)
+    participant D as DockerLabRunner
+    participant T as Traefik
+    B->>A: POST /labs/{slug}/launch
+    A->>R: status = pending (unless starting or ready)
+    A->>Q: dispatch LaunchLab(user, lab)
+    A-->>B: 202 {status}
+    Q->>R: lock lab:{project}:lock (block up to 10 s, else release to queue)
+    Q->>R: register project in labs:running, touch last_seen
+    alt instance not running
+        Q->>R: status = starting
+        Q->>D: isRunning, then up (docker compose up -d --build --wait)
+        D-->>T: container labels (Host rule)
+        Q->>R: FlagService::issue (flag.txt plus sha256 with TTL)
+    end
+    Q->>R: lab_user firstOrCreate (started_at only on first launch)
+    Q->>R: status = ready, touch last_seen
+    loop poll
+        B->>A: GET /labs/{slug}/status
+        A-->>B: {status, url?}
+    end
+    B->>T: http://{project with - }.labs.localhost
+```
+
+**Cache keys** (all via the `Cache` facade, no Redis-only commands):
+
+| Key | Value | TTL |
+|---|---|---|
+| `lab:{project}:status` | `pending`, `starting`, `ready`, `stopped`, `failed`; a missing key reads as `stopped` | none |
+| `lab:{project}:flag` | sha256 of the flag | `labs.max_minutes` |
+| `lab:{project}:last_seen` | unix timestamp | none |
+| `lab:{project}:lock` | atomic lock | 120 s |
+| `labs:running` | map `project => slug` (the reaper needs the slug, which cannot be derived from the name), written under the 10 s lock `labs:running:lock` | none |
+
+**Flag.** `FlagService::issue` writes a random 32-byte hex flag to the instance flag file (phase 3: `labs/{slug}/flag.txt`, directory created if missing) and stores only its sha256 in cache. `verify` compares with `hash_equals`; no stored hash, an empty submission or an expired TTL all mean false. See [ADR 0004](decisions/0004-flag-in-redis.md). A correct submission updates only the submitting user's `lab_user` row (and only while it is `started`), records the attempt, then dispatches `StopLab`.
+
+**Lock (D3).** `LaunchLab` and `StopLab` both run under `lab:{project}:lock`. A second launch waits up to 10 s, then finds the instance running and does not call `up`; if the lock is still held after 10 s the job releases itself back to the queue. Job timeout is 180 s, compose calls are killed after 150 s.
+
+**Reaper (D10).** `labs:reap` runs every minute, walks `labs:running` and dispatches `StopLab(slug, project)` for each project whose `last_seen` is older than `labs.idle_minutes` (or missing). `StopLab` runs `down` (compose down `-v --remove-orphans`, then empties `labs/{slug}/docker/storage` and `labs/{slug}/storage`, keeping `.gitkeep`), forgets the flag hash, sets status `stopped` and removes the project from `labs:running`.
+
+**Failure handling.** If `up` throws `LabRunnerException`, `LaunchLab` logs the error, sets status `failed`, issues no flag and creates no `lab_user` row (so the hint clock does not start). `LaunchLab` then runs a best-effort `down` (its own failure is only logged) so no partial stack survives; the project stays in `labs:running`, so the reaper retries if that `down` failed. When a launch finds the instance running but no flag hash in cache (TTL expired by repeated relaunches), it re-issues a fresh flag (`FlagService::isIssued`) before setting `ready`; an instance is never `ready` without a valid flag. A new launch retries (status goes `pending`, then `starting`). A lock timeout is not a failure: the job is released back to the queue. In phase 3 the instance is shared per lab, so one student's correct flag stops it for everyone on that lab; phase 6 removes this by changing only `InstanceResolver::project()`.
 
 ### Admin
 _To be written by the Admin track._
