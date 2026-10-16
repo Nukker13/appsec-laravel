@@ -10,6 +10,8 @@ services:
       - ./storage/tmp:/tmp
   nginx:
     image: nginx:1.29
+    depends_on:
+      - app
     restart: no
     volumes:
       - ../:/labs/stored_xss

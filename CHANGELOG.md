@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Phase 6: per-user instances (2026-10-17)
+- Each user gets their own instance `lab_{slug}_u{id}` at `lab-{slug}-u{id}.labs.localhost`, run from a private copy of the lab folder (own flag, MySQL data, uploads, SQLite). `labs/` is read-only at runtime (ADR 0005).
+- The flag is issued before `up`. Launches over `LABS_MAX_INSTANCES` are refused with 503 `capacity`, and a failed launch frees its slot immediately.
+- nginx waits for app in every lab (three XSS labs were still racing).
+- Live acceptance, without exploits: all 10 labs run two users at once, both routed 200 through Traefik, flags distinct inside the containers, a cross-user flag rejected, and stop removes containers and instance dirs.
+
+### Phase 5: skipped
+- Exploit-based solvability tests were skipped by owner decision; the owner tests the labs by hand.
+
 ### Phase 4: admin v1 (2026-10-16)
 - `/admin` progress matrix (status, solve time, attempts up to the first correct one), `/admin/labs` analytics (completion %, median solve time, average attempts, hints released at completion), `/admin/users/{user}` with reset / mark-complete overrides. A reason is required, and each change and its audit row share one transaction. Metrics are defined in `docs/ADMIN.md`.
 - Admin routes use `withoutScopedBindings()`, so an override works for users without progress on that lab.
