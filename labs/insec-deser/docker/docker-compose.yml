@@ -9,6 +9,8 @@ services:
       - ../:/labs/insec_deser
   nginx:
     image: nginx:1.29
+    depends_on:
+      - app
     restart: no
     volumes:
       - ../:/labs/insec_deser

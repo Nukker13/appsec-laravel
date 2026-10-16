@@ -9,6 +9,8 @@ services:
       - ../:/labs/type_juggle
   nginx:
     image: nginx:1.29
+    depends_on:
+      - app
     restart: no
     volumes:
       - ../:/labs/type_juggle
