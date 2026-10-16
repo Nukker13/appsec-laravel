@@ -34,7 +34,6 @@ flag.txt
 
 # Labs
 labs/**/vendor/
-labs/**/composer.lock
 labs/**/flag.txt
 labs/**/users.db
 labs/**/docker/storage/
