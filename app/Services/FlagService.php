@@ -55,10 +55,10 @@ class FlagService
         Cache::forget($this->key($project));
     }
 
-    /** Absolute path of the instance flag file. Phase 3: labs/{slug}/flag.txt; phase 6: storage/app/instances/{project}/flag.txt. */
+    /** Absolute path of the instance flag file. {labs.instances_path}/{project}/lab/flag.txt (the flag.txt of the instance copy). */
     public function flagFile(string $project, Lab $lab): string
     {
-        return rtrim(config()->string('labs.path'), '/').'/'.$lab->slug.'/flag.txt';
+        return rtrim(config()->string('labs.instances_path'), '/').'/'.$project.'/lab/flag.txt';
     }
 
     private function key(string $project): string

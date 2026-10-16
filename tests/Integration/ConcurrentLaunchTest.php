@@ -90,7 +90,7 @@ class ConcurrentLaunchTest extends TestCase
         $flagFile = app(FlagService::class)->flagFile($project, $this->lab);
 
         $worker = fn (): Process => new Process(
-            [PHP_BINARY, __DIR__.'/launch_worker.php', (string) $this->user->id, (string) $this->lab->id, $this->stateDir],
+            [PHP_BINARY, __DIR__.'/launch_worker.php', (string) $this->user->id, (string) $this->lab->id, $this->stateDir, $this->instancesDir],
             base_path(),
             $this->workerEnvironment(),
             timeout: 90,
