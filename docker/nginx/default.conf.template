@@ -1,0 +1,22 @@
+# Rendered by the nginx image (envsubst). HOST_PROJECT_PATH is the host absolute
+# path, which is also the path inside the app container (docs/decisions/0001).
+server {
+    listen 80;
+    server_name _;
+    root "${HOST_PROJECT_PATH}/public";
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass app:9000;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}

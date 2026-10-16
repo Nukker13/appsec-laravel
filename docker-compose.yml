@@ -1,0 +1,105 @@
+# Platform stack. Lab instances are started by LabRunner from labs/{slug}/docker/docker-compose.yml
+# and join the external network labs_proxy created here.
+#
+# HOST_PROJECT_PATH must be the absolute path of this directory ON THE HOST. It is mounted at
+# the same path inside app/queue/scheduler so bind mounts in lab compose files resolve
+# identically for the host daemon (docs/decisions/0001-host-path-bind-mounts.md).
+
+x-php: &php
+  build:
+    context: ./docker/php
+  image: appsec-php:8.5
+  working_dir: ${HOST_PROJECT_PATH:-${PWD}}
+  volumes:
+    - type: bind
+      source: ${HOST_PROJECT_PATH:-${PWD}}
+      target: ${HOST_PROJECT_PATH:-${PWD}}
+    - type: bind
+      source: /var/run/docker.sock
+      target: /var/run/docker.sock
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks: [default, labs_proxy]
+
+services:
+  app:
+    <<: *php
+    # php-fpm master runs as root, workers as www-data (no docker.sock access needed for web requests).
+
+  nginx:
+    image: nginx:1.29
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-${PWD}}
+    volumes:
+      - ./docker/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - type: bind
+        source: ${HOST_PROJECT_PATH:-${PWD}}/public
+        target: ${HOST_PROJECT_PATH:-${PWD}}/public
+        read_only: true
+    depends_on: [app]
+
+  queue:
+    <<: *php
+    command: php artisan queue:work --tries=1 --timeout=180 --sleep=1
+    restart: unless-stopped
+
+  scheduler:
+    <<: *php
+    command: php artisan schedule:work
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_DATABASE:-appsec}
+      MYSQL_USER: ${DB_USERNAME:-appsec}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  traefik:
+    image: traefik:v3.6
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=labs_proxy
+      - --entrypoints.web.address=:80
+      - --api=false
+      - --log.level=INFO
+    ports:
+      # Labs are intentionally vulnerable: loopback only.
+      - "127.0.0.1:80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [labs_proxy]
+    restart: unless-stopped
+
+networks:
+  labs_proxy:
+    name: labs_proxy
+
+volumes:
+  mysql_data:
+  redis_data:
