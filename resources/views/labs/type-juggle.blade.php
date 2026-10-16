@@ -14,10 +14,10 @@
 function computeHash(string $algo, string $password): string
 {
     return match($algo) {
-        'md5'    => md5($password),
-        'sha1'   => sha1($password),
-        'sha256' => hash('sha256', $password),
-        default  => md5($password),
+        'md5'    =&gt; md5($password),
+        'sha1'   =&gt; sha1($password),
+        'sha256' =&gt; hash('sha256', $password),
+        default  =&gt; md5($password),
     };
 }
 

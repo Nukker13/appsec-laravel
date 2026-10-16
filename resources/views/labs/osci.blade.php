@@ -9,7 +9,7 @@
 
 <div class="card">
     <div class="card-header">Vulnerable Code Example</div>
-    <pre><code class="language-php">@verbatim<?php
+    <pre><code class="language-php">@verbatim&lt;?php
 public function getTokenByConfirmationCode(int $accountId, string $confirmationCode, string $appClientId, string $appSecret): State
 {
     $request = sprintf(

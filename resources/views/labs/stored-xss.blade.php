@@ -9,16 +9,16 @@
 
 <div class="card">
     <div class="card-header">Vulnerable Code Example</div>
-    <pre><code class="language-php">@verbatim<?php
+    <pre><code class="language-php">@verbatim&lt;?php
 require_once 'auth_moderator_or_admin.php';
 $userId = (int)($_GET['id'] ?? 0);
-?>
-<!doctype html>
-<html>
-  <body>
-    <h2>User profile</h2>
-    <div>Name: <?= $user['username_raw'] ?></div>
-    <div>Email: <?= $user['email_raw'] ?></div>
-  </body>
-</html>@endverbatim</code></pre>
+?&gt;
+&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;body&gt;
+    &lt;h2&gt;User profile&lt;/h2&gt;
+    &lt;div&gt;Name: &lt;?= $user['username_raw'] ?&gt;&lt;/div&gt;
+    &lt;div&gt;Email: &lt;?= $user['email_raw'] ?&gt;&lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;@endverbatim</code></pre>
 </div>
