@@ -67,6 +67,8 @@ class LaunchLab implements ShouldQueue
             // A partial stack must not survive a failure.
             try {
                 $runner->down($this->lab->slug, $project);
+                // Nothing is left running: free the capacity slot now. If down() failed, stay registered so the reaper retries.
+                $registry->unregister($project);
             } catch (LabRunnerException $downError) {
                 Log::error('Lab cleanup after failed launch failed.', ['project' => $project, 'error' => $downError->getMessage()]);
             }
