@@ -45,3 +45,15 @@
 - Linux hosts: the UID of the bind-mounted project vs `www-data` (storage permissions) is not handled.
 - Lab compose files must join external network `labs_proxy`; `labs/` does not exist yet (phase 3).
 - `DockerLabRunner` talks to the daemon as root in `queue`; web workers cannot reach the socket by design.
+
+## Review finding (orchestrator): platform reachable from labs_proxy - fixed
+`app`, `queue` and `scheduler` were attached to `labs_proxy`; `nc -z app 9000` from that network connected. Fix: they are on `default` only. Probe after the fix (`docker run --rm --network labs_proxy busybox nc -z -w 2 HOST PORT`):
+```
+app:9000 unreachable
+queue:9000 unreachable
+scheduler:9000 unreachable
+mysql:3306 unreachable
+redis:6379 unreachable
+traefik:80 reachable (expected)
+```
+`migrate:fresh --seed`, phpstan, pint pass; `curl localhost:8080/` returns 200 (after restarting nginx to refresh the app IP).

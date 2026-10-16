@@ -22,7 +22,6 @@ x-php: &php
       condition: service_healthy
     redis:
       condition: service_healthy
-  networks: [default, labs_proxy]
 
 services:
   app:

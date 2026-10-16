@@ -52,6 +52,7 @@ sequenceDiagram
 
 - Mounting `/var/run/docker.sock` into `app`, `queue` and `scheduler` is equivalent to root on the host. Anyone who achieves code execution in those containers owns the host. See [ADR 0002](decisions/0002-docker-socket-trust-boundary.md).
 - Traefik gets the socket read-only (it only lists containers and reads labels).
+- Network isolation: the lab network `labs_proxy` never contains a platform service except Traefik. `app`, `queue`, `scheduler`, `mysql`, `redis` and `nginx` are on `default` only, so a shell inside a lab (for example `osci`) cannot reach php-fpm on `app:9000`, which would mean code execution next to the Docker socket.
 - Lab containers never receive the socket (defect D10: the old `stopper` container is gone).
 - The labs are intentionally vulnerable. All published ports bind to `127.0.0.1`; MySQL and Redis are not published. Do not expose this stack on a network.
 
