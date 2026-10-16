@@ -98,8 +98,8 @@ interface LabRunner
 
 ## Lab instance routing
 
-- Lab compose files publish **no host ports** and have no `container_name`. The entry service (`nginx`, or `app` for `ssrf`) joins the external network `labs_proxy` and carries Traefik labels for `Host(\`${LAB_HOST}\`)`.
-- `DockerLabRunner::up()` sets env `COMPOSE_PROJECT_NAME={project}`, `LAB_HOST={project}.labs.localhost` (with `-` instead of `_`), and `LAB_FLAG_FILE` (absolute path of the instance flag file, phase 6).
+- Lab compose files publish **no host ports** and have no `container_name`. The entry service (`nginx`, or `app` for `ssrf`) joins the external network `labs_proxy` and carries Traefik labels for `Host(\`${LAB_HOST}\`)`. **Only** the entry service joins `labs_proxy`, and no platform service except `traefik` is ever on it (phase 1 review: php-fpm reachable from a lab shell = host root via `docker.sock`).
+- `DockerLabRunner::up()` sets env `COMPOSE_PROJECT_NAME={project}`, `LAB_HOST={project}.labs.localhost` (with `-` instead of `_`), and `LAB_FLAG_FILE` (= `FlagService::flagFile()`, absolute; set from phase 3, labs start reading it in phase 6).
 - `labs.status` returns `url = http://{LAB_HOST}` once the status is `ready`.
 
 ## Jobs, commands, cache keys
@@ -122,13 +122,13 @@ Cache keys (Redis store, logical names):
 ## Observable behaviour (fixed 2026-10-16 for the phase 2 tests)
 
 - Error flash key is `error` (`redirect()->route('home')->with('error', …)`).
-- `labs.launch` dispatches `LaunchLab`, sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does.
+- `labs.launch` always dispatches `LaunchLab` (it refreshes `last_seen` and the user's progress even when the instance runs), sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does, for the launching user, even when the instance is already running.
 - `labs.status`: missing status key → `stopped`. `url` is present only when the status is `ready`.
 - `labs.hints`: no `lab_user` row (never launched) → `{hints: []}`. `next_at` is ISO 8601 and is omitted when every hint is released.
 - `labs.flag`: request field `flag` (required string, else 422). Every non-throttled submission writes one `flag_attempts` row. A correct flag sets the user's `lab_user` to `completed` + `completed_at`, then dispatches `StopLab`. No issued flag → `{correct: false}`.
 - `LaunchLab` when the lock is held by another owner: it never calls `LabRunner::up`; it waits with `block()` up to 10 s, then releases itself back to the queue.
 - `user:promote` / `user:demote`: exit code 0 on success, 1 when the email is unknown.
-- Admin override `reset` deletes the user's `lab_user` row (flag attempts are kept as history). `complete` upserts `status=completed`, `completed_at=now`, `started_at` kept or `now` if absent. Both write `meta` = the previous pivot state (or `null`). The audit row is written through the `AdminAction` model inside the transaction.
+- Admin override `reset` deletes the user's `lab_user` row (flag attempts are kept as history). `complete` upserts `status=completed`, `completed_at=now`, `started_at` kept or `now` if absent. Both write `meta` = the previous pivot state (or `null`). Order inside the one transaction: progress change first, then the audit row through the `AdminAction` model (so a failing audit insert must roll the change back).
 - Unknown `?category` on `labs.index` → validation error (redirect with errors / 422 for JSON). Missing category = all labs.
 
 ## Admin metrics
