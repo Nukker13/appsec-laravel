@@ -116,3 +116,7 @@ Green now (18 of 155), all explained: 12 guest redirects (real `auth`), 5 non-ad
 
 - Lab solvability (phase 5) as instructed.
 - Nothing else from the list is missing. Not tested because not observable: the exact cache key layout of `labs:running`, `last_seen` internals, the failure path of `LaunchLab` (`failed` status): the contract does not say what the job does when `LabRunner::up` throws.
+
+## Addendum: unverified Google email
+
+`AuthTest::googleUser()` now returns a user whose raw payload has `email_verified => true`. New: `test_callback_refuses_unverified_google_email` (false, missing, string "false": redirect `home` + `error`, no users row, guest) and `test_callback_refuses_email_owned_by_another_google_account` (existing user's google_id, email, name, role and `updated_at` unchanged, still one user). The first is red until the implementation checks `email_verified`; the second was not covered before.

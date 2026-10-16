@@ -61,9 +61,14 @@ class AuthTest extends TestCase
         Socialite::shouldReceive('driver')->zeroOrMoreTimes()->andReturn($provider);
     }
 
-    private function googleUser(string $id, string $email, string $name): SocialiteUser
+    /**
+     * @param  array<string, mixed>  $raw  what Google returns besides the mapped fields; a normal user is verified
+     */
+    private function googleUser(string $id, string $email, string $name, array $raw = ['email_verified' => true]): SocialiteUser
     {
-        return (new SocialiteUser)->map(['id' => $id, 'name' => $name, 'email' => $email, 'nickname' => null, 'avatar' => null]);
+        return (new SocialiteUser)
+            ->setRaw(['sub' => $id, 'email' => $email, 'name' => $name] + $raw)
+            ->map(['id' => $id, 'name' => $name, 'email' => $email, 'nickname' => null, 'avatar' => null]);
     }
 
     public function test_google_callback_creates_user_with_user_role(): void
@@ -79,6 +84,50 @@ class AuthTest extends TestCase
         $this->assertFalse($user->isAdmin());
         $this->assertAuthenticatedAs($user);
         $this->assertSame(1, User::query()->count());
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function unverifiedEmails(): array
+    {
+        return [
+            'email_verified false' => [['email_verified' => false]],
+            'email_verified missing' => [[]],
+            'email_verified string "false"' => [['email_verified' => 'false']],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $raw
+     */
+    #[DataProvider('unverifiedEmails')]
+    public function test_callback_refuses_unverified_google_email(array $raw): void
+    {
+        $this->googleReturns($this->googleUser('555', 'victim@example.com', 'Squatter', $raw));
+
+        $this->get(route('auth.callback', ['code' => 'abc', 'state' => 'xyz']))
+            ->assertRedirectToRoute('home')
+            ->assertSessionHas('error');
+
+        $this->assertSame(0, User::query()->count());
+        $this->assertGuest();
+    }
+
+    public function test_callback_refuses_email_owned_by_another_google_account(): void
+    {
+        $owner = User::factory()->admin()->create(['google_id' => '111', 'email' => 'boss@example.com', 'name' => 'Boss']);
+        $this->googleReturns($this->googleUser('222', 'boss@example.com', 'Impostor'));
+
+        $this->get(route('auth.callback', ['code' => 'abc', 'state' => 'xyz']))
+            ->assertRedirectToRoute('home')
+            ->assertSessionHas('error');
+
+        $this->assertGuest();
+        $this->assertSame(1, User::query()->count());
+        $fresh = $owner->fresh();
+        $this->assertSame(['111', 'boss@example.com', 'Boss', 'admin'], [$fresh->google_id, $fresh->email, $fresh->name, $fresh->role]);
+        $this->assertTrue($fresh->updated_at->equalTo($owner->updated_at));
     }
 
     public function test_admin_role_survives_relogin(): void
