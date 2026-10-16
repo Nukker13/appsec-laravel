@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Socialite\AbstractUser;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\GoogleProvider;
 use Throwable;
@@ -36,6 +37,11 @@ class GoogleController extends Controller
 
         if ($googleId === '' || $email === '') {
             return $this->failed('Google did not return an account id and email.');
+        }
+
+        // Never trust an email Google has not verified (strictly boolean true; "false" strings and absence refuse).
+        if (! $google instanceof AbstractUser || ($google->getRaw()['email_verified'] ?? null) !== true) {
+            return $this->failed('Your Google email address is not verified.');
         }
 
         // Known email bound to a different Google account: refuse rather than take over or crash on the unique index.

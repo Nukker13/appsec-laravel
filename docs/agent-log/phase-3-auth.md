@@ -21,3 +21,6 @@
 ## Open issues
 - `redirect()` is not covered by a test.
 - A user whose Google account changed id cannot log in until an admin fixes the row.
+
+## Review finding: email_verified
+The callback trusted the email without `email_verified`. Fixed: refuse unless the raw value is strictly `true` (false, missing, and the string "false" all refuse). See ARCHITECTURE.md, Auth.

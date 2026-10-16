@@ -76,6 +76,8 @@ Flow: `GET /login` (guest) sends the browser to Google through Socialite (scopes
 | D7 (OAuth errors reached the user) | Every `Throwable` from Socialite (`InvalidStateException`, Guzzle `ClientException`, missing `code`, ...) is reported and turned into a redirect to `home` with flash `error`. |
 | D13 (logout without CSRF) | Logout is a `POST` in the `web` group, so CSRF verification applies (419 without token); the session is invalidated and the token regenerated. |
 
+Unverified email: the callback refuses (redirect `home` with `error`, nothing written) unless Google's raw `email_verified` is strictly boolean `true`. Otherwise someone could register a Google account on another person's address, sign in first and squat it, and `user:promote <email>` would then promote the attacker.
+
 Edge case: a known email arriving with a different `google_id` (recycled or second Google account). The callback refuses the login (redirect to `home` with `error`) and writes nothing. Linking by email would let whoever controls that address take over the account, including an admin, and inserting would violate the unique `email` index. An admin has to resolve it manually.
 
 ### Catalog and hints
