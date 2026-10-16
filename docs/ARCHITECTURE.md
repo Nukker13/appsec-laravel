@@ -65,7 +65,7 @@ Edge case: a known email arriving with a different `google_id` (recycled or seco
 **Client flow** (`public/js/lab.js`, no build step). Launch POSTs `labs.launch` with the CSRF header, then polls `labs.status` every 2 s showing `pending/starting/ready/failed`. On `ready` it waits about 2.5 s (Traefik pickup) before showing "Open lab" (new tab) with a retry-on-404 note. Hints are fetched from `labs.hints` on load and re-fetched at `next_at` (at most every 30 s while the lab is not launched). The flag form POSTs `labs.flag` via fetch and handles correct, incorrect, 429 and 422.
 
 ### Runtime and flag
-Docker is reached only through `App\Contracts\LabRunner` (`DockerLabRunner`: Symfony Process, argument arrays, slug must exist in `labs`). `InstanceResolver::project()` names the instance (`lab_{slug with - as _}` in phase 3); every cache key below is keyed by that project name.
+Docker is reached only through `App\Contracts\LabRunner` (`DockerLabRunner`: Symfony Process, argument arrays, slug must exist in `labs`). `InstanceResolver::project()` names the instance (`lab_{slug with - as _}_u{user_id}`, one instance per user and lab); every cache key below is keyed by that project name.
 
 ```mermaid
 sequenceDiagram
@@ -76,16 +76,22 @@ sequenceDiagram
     participant D as DockerLabRunner
     participant T as Traefik
     B->>A: POST /labs/{slug}/launch
-    A->>R: status = pending (unless starting or ready)
-    A->>Q: dispatch LaunchLab(user, lab)
-    A-->>B: 202 {status}
+    alt registered instances >= labs.max_instances and project not registered
+        A-->>B: 503 {status: capacity}
+    else
+        A->>R: status = pending (unless starting or ready)
+        A->>Q: dispatch LaunchLab(user, lab)
+        A-->>B: 202 {status}
+    end
     Q->>R: lock lab:{project}:lock (block up to 10 s, else release to queue)
     Q->>R: register project in labs:running, touch last_seen
     alt instance not running
         Q->>R: status = starting
-        Q->>D: isRunning, then up (docker compose up -d --build --wait)
+        Q->>D: FlagService::issue (creates instances/{project}/lab/flag.txt, sha256 in cache with TTL)
+        Q->>D: up: copy labs/{slug} to instances/{project}/lab, docker compose up -d --build --wait from the copy
         D-->>T: container labels (Host rule)
-        Q->>R: FlagService::issue (flag.txt plus sha256 with TTL)
+    else running, no flag hash
+        Q->>R: FlagService::issue again
     end
     Q->>R: lab_user firstOrCreate (started_at only on first launch)
     Q->>R: status = ready, touch last_seen
@@ -106,20 +112,22 @@ sequenceDiagram
 | `lab:{project}:lock` | atomic lock | 120 s |
 | `labs:running` | map `project => slug` (the reaper needs the slug, which cannot be derived from the name), written under the 10 s lock `labs:running:lock` | none |
 
-**Flag.** `FlagService::issue` writes a random 32-byte hex flag to the instance flag file (phase 3: `labs/{slug}/flag.txt`, directory created if missing) and stores only its sha256 in cache. `verify` compares with `hash_equals`; no stored hash, an empty submission or an expired TTL all mean false. See [ADR 0004](decisions/0004-flag-in-redis.md). A correct submission updates only the submitting user's `lab_user` row (and only while it is `started`), records the attempt, then dispatches `StopLab`.
+**Flag.** `FlagService::issue` writes a random 32-byte hex flag to the instance flag file (`{labs.instances_path}/{project}/lab/flag.txt`, directory created if missing; issued before `up`, because ssrf bind-mounts the file) and stores only its sha256 in cache. `verify` compares with `hash_equals`; no stored hash, an empty submission or an expired TTL all mean false. See [ADR 0004](decisions/0004-flag-in-redis.md). A correct submission updates only the submitting user's `lab_user` row (and only while it is `started`), records the attempt, then dispatches `StopLab`.
 
 **Lock (D3).** `LaunchLab` and `StopLab` both run under `lab:{project}:lock`. A second launch waits up to 10 s, then finds the instance running and does not call `up`; if the lock is still held after 10 s the job releases itself back to the queue. Job timeout is 180 s, compose calls are killed after 150 s.
 
-**Reaper (D10).** `labs:reap` runs every minute, walks `labs:running` and dispatches `StopLab(slug, project)` for each project whose `last_seen` is older than `labs.idle_minutes` (or missing). `StopLab` runs `down` (compose down `-v --remove-orphans`, then empties `labs/{slug}/docker/storage` and `labs/{slug}/storage`, keeping `.gitkeep`), forgets the flag hash, sets status `stopped` and removes the project from `labs:running`.
+**Reaper (D10).** `labs:reap` runs every minute, walks `labs:running` and dispatches `StopLab(slug, project)` for each project whose `last_seen` is older than `labs.idle_minutes` (or missing). `StopLab` runs `down` (compose down `-v --remove-orphans --rmi local` from the instance copy, then deletes `{labs.instances_path}/{project}`; if the copy is already gone it uses the original compose file with `-p {project}`; `labs/{slug}` is never written at runtime), forgets the flag hash, sets status `stopped` and removes the project from `labs:running`.
 
-**Failure handling.** If `up` throws `LabRunnerException`, `LaunchLab` logs the error, sets status `failed`, issues no flag and creates no `lab_user` row (so the hint clock does not start). `LaunchLab` then runs a best-effort `down` (its own failure is only logged) so no partial stack survives; the project stays in `labs:running`, so the reaper retries if that `down` failed. When a launch finds the instance running but no flag hash in cache (TTL expired by repeated relaunches), it re-issues a fresh flag (`FlagService::isIssued`) before setting `ready`; an instance is never `ready` without a valid flag. A new launch retries (status goes `pending`, then `starting`). A lock timeout is not a failure: the job is released back to the queue. In phase 3 the instance is shared per lab, so one student's correct flag stops it for everyone on that lab; phase 6 removes this by changing only `InstanceResolver::project()`.
+**Failure handling.** If `up` throws `LabRunnerException`, `LaunchLab` logs the error, forgets the flag, sets status `failed` and creates no `lab_user` row (so the hint clock does not start). `LaunchLab` runs a best-effort `down` (its own failure is only logged) so no partial stack survives; the project stays in `labs:running`, so the reaper retries if that `down` failed. When a launch finds the instance running but no flag hash in cache (TTL expired by repeated relaunches), it re-issues a fresh flag (`FlagService::isIssued`) before setting `ready`; an instance is never `ready` without a valid flag. A new launch retries (status goes `pending`, then `starting`). A lock timeout is not a failure: the job is released back to the queue. A failed instance stays registered until the reaper or a retry, so it still counts against capacity.
+
+**Per-instance copy and capacity (phase 6).** `DockerLabRunner::up()` copies `labs/{slug}` to `{labs.instances_path}/{project}/lab` when absent (contents of `docker/storage` and `storage` are not copied, the directories are; an issued `flag.txt` is kept), so every relative bind mount is per instance. See [ADR 0005](decisions/0005-per-instance-lab-copy.md). `labs.launch` answers 503 `{status: capacity}` without dispatching when the registered count is at least `labs.max_instances` and the project is not registered.
 
 ### Labs
 
 **Compose file rules:** Each lab's `labs/{slug}/docker/docker-compose.yml` follows these constraints:
 
 - **No stopper service** (defect D10): the old `stopper` service that mounted `/var/run/docker.sock` is removed entirely. Instance cleanup is handled by `labs:reap`.
-- **No `container_name`:** services use their service name as the hostname. Phase 3 sets `COMPOSE_PROJECT_NAME` to `lab_{slug}` per lab; phase 6 will set it to `lab_{slug}_u{user_id}` per user.
+- **No `container_name`:** services use their service name as the hostname. `COMPOSE_PROJECT_NAME` is `lab_{slug}_u{user_id}` per user and lab (phase 6).
 - **No published host ports:** all services except the entry service have no `ports:` section. The entry service has no host-side port either; routing is entirely through Traefik.
 - **Entry service on `labs_proxy`:** exactly one service (e.g. `nginx` for most labs, `app` for ssrf) joins both `default` (internal) and the external `labs_proxy` network. It carries Traefik labels with a Host rule using `${LAB_HOST}` (set by `LabRunner` to `lab_{project with - for _}.labs.localhost`).
 - **Traefik labels:** the entry service advertises itself with labels keyed by `${COMPOSE_PROJECT_NAME}`:
@@ -131,7 +139,7 @@ sequenceDiagram
 
 **Network aliases:** when lab code references an old `container_name` (e.g. `http://ssrf_admin:9090`), the service is given an alias on its network instead of a fixed name. For example, the ssrf admin service has `networks: labnet: aliases: [ssrf_admin]`, allowing the app to reach it by the old name without editing lab code.
 
-**Flag delivery:** each lab stores `flag.txt` at a known path inside its instance (either app root or a documented location within `labs/{slug}/`). The platform writes the plaintext flag to `labs/{slug}/flag.txt` on the host; bind mounts (`../:/labs/{slug}`) make it visible to containers. Lab code reads it via file operations or HTTP endpoints exposed by the same instance, and submits the flag through the platform's `/labs/{slug}/flag` endpoint.
+**Flag delivery:** each lab stores `flag.txt` at a known path inside its instance (either app root or a documented location within `labs/{slug}/`). The platform writes the plaintext flag to `flag.txt` in the instance copy (`{labs.instances_path}/{project}/lab/flag.txt`); bind mounts (`../:/labs/{slug}`, resolved against the copy) make it visible to containers. Lab code reads it via file operations or HTTP endpoints exposed by the same instance, and submits the flag through the platform's `/labs/{slug}/flag` endpoint.
 
 ### Admin
 Admin screens (`/admin`, `/admin/labs`, `/admin/users/{user}`) sit behind `auth` + `can:admin`. Controllers are thin; `App\Services\AdminMetrics` loads `lab_user` and `flag_attempts` in bulk (one query each, attempts streamed with a cursor) and computes every metric in PHP, so Blade only formats. Overrides live in `ProgressOverrideController`: validate `reason`, then one `DB::transaction` that changes `lab_user` and then inserts `admin_actions` through the `AdminAction` model, so a failing audit insert rolls the change back. The admin routes use `withoutScopedBindings()` because `{lab:slug}` under `{user}` would otherwise be resolved through `User::labs()` and 404 for users without progress. Details and metric definitions: `docs/ADMIN.md`.
