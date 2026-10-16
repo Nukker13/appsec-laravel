@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\FlagService;
 use App\Services\InstanceResolver;
 use App\Testing\FakeLabRunner;
+use Carbon\CarbonInterface;
 use Database\Seeders\LabSeeder;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Testing\TestResponse;
@@ -61,6 +62,16 @@ abstract class TestCase extends BaseTestCase
     protected function projectFor(User $user, Lab $lab): string
     {
         return app(InstanceResolver::class)->project($user, $lab);
+    }
+
+    /** Insert a lab_user row directly (progress that existed before the test started). */
+    protected function progress(User $user, Lab $lab, ?CarbonInterface $startedAt = null, string $status = 'started', ?CarbonInterface $completedAt = null): void
+    {
+        $user->labs()->attach($lab->id, [
+            'status' => $status,
+            'started_at' => $startedAt ?? now(),
+            'completed_at' => $completedAt,
+        ]);
     }
 
     /** POST labs.launch as $user (the job runs inline on the sync queue). */
