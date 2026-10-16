@@ -66,7 +66,7 @@ class AdminMetrics
             /** @var list<array{after: int, text: string}> $hints */
             $hints = config('hints.'.$lab->slug, []);
             $released = array_map(
-                fn (int $s): int => count(array_filter($hints, fn (array $h): bool => $h['after'] * 60 <= $s)),
+                fn (int $s): int => count(array_filter($hints, fn (array $h): bool => $s >= $h['after'] * 60)),
                 $times,
             );
 

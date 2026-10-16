@@ -31,7 +31,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:flag-check')
         ->name('labs.flag');
 
-    Route::middleware('can:admin')->prefix('admin')->group(function () {
+    Route::middleware('can:admin')->prefix('admin')->withoutScopedBindings()->group(function () {
         Route::get('/', [ProgressController::class, 'index'])->name('admin.progress');
         Route::get('/labs', [LabAnalyticsController::class, 'index'])->name('admin.labs');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('admin.users.show');
