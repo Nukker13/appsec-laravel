@@ -23,7 +23,8 @@ use Illuminate\Support\Facades\Log;
  *
  * A held lock is waited for up to 10 s; after that the job goes back to the queue. If up() throws LabRunnerException
  * the status becomes failed, no flag is issued, no lab_user row is created, and the project stays registered so that
- * the reaper cleans up whatever compose left behind.
+ * a best-effort down() removes any partial stack, and the reaper retries if that failed.
+ * A running instance with no valid flag (TTL expired) gets a fresh one before it is reported ready.
  */
 class LaunchLab implements ShouldQueue
 {
@@ -57,8 +58,17 @@ class LaunchLab implements ShouldQueue
                 $registry->setStatus($project, 'starting');
                 $runner->up($this->lab->slug, $project);
                 $flags->issue($project, $this->lab);
+            } elseif (! $flags->isIssued($project)) {
+                // Running without a valid flag (expired TTL, or left over from a failed launch): never report ready.
+                $flags->issue($project, $this->lab);
             }
         } catch (LabRunnerException $e) {
+            // A partial stack must not survive a failure.
+            try {
+                $runner->down($this->lab->slug, $project);
+            } catch (LabRunnerException $downError) {
+                Log::error('Lab cleanup after failed launch failed.', ['project' => $project, 'error' => $downError->getMessage()]);
+            }
             $registry->setStatus($project, 'failed');
             Log::error('Lab launch failed.', ['project' => $project, 'user_id' => $this->user->getKey(), 'error' => $e->getMessage()]);
 

@@ -32,3 +32,8 @@
 - Phase 3 shares one instance per lab: a correct flag from one student stops the lab for others and any student can submit the shared flag. Intended until phase 6.
 - Real `docker compose` calls are unverified here (no `labs/`, no docker.sock in the test stack); the `--wait` flag assumes the labs' compose files start cleanly.
 - `down` ignores files it cannot delete (for example root-owned files written by containers).
+
+## Follow-up: never ready without a valid flag (`fix(D2,D4)`)
+- `up` failure now also runs a best-effort `down` (exception logged, not rethrown) before status `failed`.
+- `LaunchLab` re-issues a flag when the instance is running and `FlagService::isIssued($project)` is false (new method, PHPDoc'd).
+- Scenarios verified by hand with a throwaway script (not committed) using `FakeLabRunner` through the container: (1) `failNextUp()` then relaunch: `downCalls` has the cleanup, status `failed`, second launch starts it and issues a flag; (2) instance running, flag key forgotten (TTL stand-in), relaunch: no second `up`, a new flag verifies, status `ready`. The existing suite also covers the unchanged paths.

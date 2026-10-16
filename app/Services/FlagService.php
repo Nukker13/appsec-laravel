@@ -28,6 +28,15 @@ class FlagService
         Cache::put($this->key($project), hash('sha256', $flag), now()->addMinutes(config()->integer('labs.max_minutes')));
     }
 
+    /**
+     * Whether a flag hash is currently stored for the instance (false after forget() or once the TTL expired).
+     * LaunchLab uses it to re-issue a flag for a running instance that has none.
+     */
+    public function isIssued(string $project): bool
+    {
+        return is_string(Cache::get($this->key($project)));
+    }
+
     /** hash_equals against the stored hash. */
     public function verify(string $project, string $submitted): bool
     {
