@@ -13,7 +13,7 @@ Path Traversal (also known as directory traversal) is a vulnerability that allow
 
 ## Flag Delivery
 
-The lab app stores the flag in `flag.txt` at the app root (`labs/path-trav/flag.txt` on host). The app allows file uploads to `images/` directory and includes files via the `f` query parameter. Successful exploitation uploads a PHP file containing `shell_exec()` to the images directory, then uses path traversal to read the flag file or execute code that outputs it.
+Host file `labs/path-trav/flag.txt` (written by `FlagService::issue`) is visible as `/labs/path_trav/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/path_trav`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
 
 ## Solvability Test
 

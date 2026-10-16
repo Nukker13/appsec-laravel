@@ -13,7 +13,7 @@ Insecure Deserialization occurs when an application deserializes attacker-contro
 
 ## Flag Delivery
 
-The lab app stores the flag in `flag.txt` at the app root (`labs/insec-deser/flag.txt` on host). The app deserializes the `booking` cookie and stores it in the `storage/` directory. Successful exploitation crafts a serialized object that exploits a `__destruct()` magic method in the app's class hierarchy, writes a PHP file containing code that reads the flag, and executes it to retrieve the flag.
+Host file `labs/insec-deser/flag.txt` (written by `FlagService::issue`) is visible as `/labs/insec_deser/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/insec_deser`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
 
 ## Solvability Test
 

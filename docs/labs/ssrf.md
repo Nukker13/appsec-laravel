@@ -13,7 +13,7 @@ Server-Side Request Forgery (SSRF) is a vulnerability that allows an attacker to
 
 ## Flag Delivery
 
-The admin service stores the flag in `flag.txt` at the working directory root (`labs/ssrf/flag.txt` on host). The app service reads this flag via HTTP request to the admin service (SSRF vulnerability). The bind mount `../flag.txt:/labs/SSRF/flag.txt:ro` on the admin service makes the flag available inside the container at `/labs/SSRF/flag.txt`. The app proxies image requests to the admin service; successful exploitation causes the app to fetch the flag endpoint from admin and return it to the attacker.
+Host file `labs/ssrf/flag.txt` is bind-mounted read-only by the `admin` service at `/labs/SSRF/flag.txt`. Only `admin` (internal network `labnet`, alias `ssrf_admin`) can read it; the public `app` service has no mount of it.
 
 ## Solvability Test
 

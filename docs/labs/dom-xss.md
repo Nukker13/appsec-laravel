@@ -14,11 +14,10 @@ DOM-based XSS vulnerabilities arise when JavaScript takes data from an attacker-
 | selenium | seleniarm/standalone-chromium | Automated browser for bot | default | — |
 | bot | Custom (Python + Selenium) | Admin bot that visits reported links | default | — |
 
-**Build note:** Dockerfile references `composer.lock` (not in source). Pending owner decision on lock file creation.
 
 ## Flag Delivery
 
-The PHP app stores the flag in `flag.txt` (relative to app root, at `labs/dom-xss/flag.txt` on host). The admin panel (`/flag` endpoint) reads this file via `file_get_contents(__DIR__ . '/../flag.txt')`, which maps to `/labs/dom-xss/flag.txt` inside the container. The bind mount `../:/labs/dom-xss:delegated` provides access. Successful exploitation hijacks the admin bot to steal the flag from the admin endpoint.
+Host file `labs/dom-xss/flag.txt` (written by `FlagService::issue`) is visible as `/labs/dom_xss/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/dom_xss`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
 
 ## Solvability Test
 

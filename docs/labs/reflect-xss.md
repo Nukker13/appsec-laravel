@@ -14,11 +14,10 @@ Reflected XSS occurs when the injected script is reflected off the web server �
 | selenium | seleniarm/standalone-chromium | Automated browser for bot | default | — |
 | bot | Custom (Python + Selenium) | Admin bot that visits reported links | default | — |
 
-**Build note:** Dockerfile references `composer.lock` (not in source). Pending owner decision on lock file creation.
 
 ## Flag Delivery
 
-The PHP app stores the flag in `flag.txt` (relative to app root, at `labs/reflect-xss/flag.txt` on host). The admin endpoint reads this file and displays it to authenticated admins. The bind mount `../:/labs/reflect-xss:delegated` provides access. Successful exploitation crafts a URL that reflects XSS payload, reports it to the bot, and the bot's admin session reveals the flag.
+Host file `labs/reflect-xss/flag.txt` (written by `FlagService::issue`) is visible as `/labs/reflect_xss/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/reflect_xss`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
 
 ## Solvability Test
 

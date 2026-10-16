@@ -14,11 +14,10 @@ Stored XSS (also called Persistent or Type-II XSS) occurs when the injected scri
 | selenium | seleniarm/standalone-chromium | Automated browser for bot | default | — |
 | bot | Custom (Python + Selenium) | Admin bot that views stored messages | default | — |
 
-**Build note:** Dockerfile references `composer.lock` (not in source). Pending owner decision on lock file creation.
 
 ## Flag Delivery
 
-The PHP app stores the flag in `flag.txt` (relative to app root, at `labs/stored-xss/flag.txt` on host). The admin panel reads this file and displays it to authenticated admins. The bind mount `../:/labs/stored-xss:delegated` provides access. Successful exploitation stores an XSS payload in the message database, the admin bot views the messages page, the payload executes in the admin's session, and the flag is exfiltrated.
+Host file `labs/stored-xss/flag.txt` (written by `FlagService::issue`) is visible as `/labs/stored_xss/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/stored_xss`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
 
 ## Solvability Test
 

@@ -2,7 +2,7 @@
 
 ## Vulnerability
 
-Broken Access Control occurs when an application relies on client-side mechanisms to enforce authorization instead of validating permissions on the server. Role-Based Access Control (RBAC) must be verified server-side on every protected endpoint — hiding UI elements or restricting navigation in the browser is not a security boundary. An attacker can bypass these restrictions by navigating directly to protected URLs, inspecting the page source, or using a proxy to observe traffic. The vulnerability enables unauthorized access to sensitive resources and privilege escalation.
+Broken Access Control occurs when an application relies on client-side mechanisms to enforce authorization instead of validating permissions on the server. Role-Based Access Control (RBAC) must be verified server-side on every protected endpoint — hiding UI elements or restricting navigation in the browser is not a security boundary. The vulnerability enables unauthorized access to sensitive resources and privilege escalation.
 
 ## Containers
 
@@ -13,7 +13,7 @@ Broken Access Control occurs when an application relies on client-side mechanism
 
 ## Flag Delivery
 
-The lab app serves a static flag page at `/flag`. The flag is stored in `labs/rbac/views/flag.php` (visible to authenticated users regardless of role). The bind mount `../:/labs/rbac` provides access. Successful exploitation navigates directly to the `/flag` endpoint without admin privileges, retrieving the flag from the unprotected page.
+Host file `labs/rbac/flag.txt` (written by `FlagService::issue`) is visible as `/labs/rbac/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/rbac`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
 
 ## Solvability Test
 
