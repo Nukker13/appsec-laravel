@@ -46,11 +46,11 @@ class FlagServiceTest extends TestCase
 
     public function test_flag_file_path_is_absolute_and_stable(): void
     {
-        $path = $this->flags->flagFile('lab_osci', $this->lab);
+        $path = $this->flags->flagFile('lab_osci_u3', $this->lab);
 
-        $this->assertStringStartsWith('/', $path);
-        $this->assertStringEndsWith('flag.txt', $path);
-        $this->assertSame($path, $this->flags->flagFile('lab_osci', $this->lab));
+        $this->assertSame($this->instancesDir.'/lab_osci_u3/lab/flag.txt', $path);
+        $this->assertSame($path, $this->flags->flagFile('lab_osci_u3', $this->lab));
+        $this->assertNotSame($path, $this->flags->flagFile('lab_osci_u4', $this->lab));
     }
 
     public function test_wrong_flag_is_false(): void

@@ -120,3 +120,22 @@ Green now (18 of 155), all explained: 12 guest redirects (real `auth`), 5 non-ad
 ## Addendum: unverified Google email
 
 `AuthTest::googleUser()` now returns a user whose raw payload has `email_verified => true`. New: `test_callback_refuses_unverified_google_email` (false, missing, string "false": redirect `home` + `error`, no users row, guest) and `test_callback_refuses_email_owned_by_another_google_account` (existing user's google_id, email, name, role and `updated_at` unchanged, still one user). The first is red until the implementation checks `email_verified`; the second was not covered before.
+
+## Addendum: phase 6 tests (per-user instances)
+
+Changed to the new contract: `TestCase` (fresh temp `labs.instances_path` per test, removed in tearDown; the `labs/` flag sweep is gone), `InstanceResolverTest` (`lab_{slug}_u{id}`), `FlagServiceTest::flag_file_path` (`{instances_path}/{project}/lab/flag.txt`), `DockerLabRunnerTest` (rewritten: temp `labs.path` with fake labs; compose from the instance copy; `down` with `-v --remove-orphans --rmi local`), and the integration worker (`launch_worker.php` takes the instances dir).
+
+New, all red against the pre-phase-6 implementation:
+- `InstancesTest::test_two_users_get_separate_instances_and_flags` (D2/D3): shared project name, shared flag, Alice solving stops Bob's.
+- `InstancesTest::test_instance_urls_are_per_user` (extra): URL is `lab-{slug}-u{id}.labs.localhost`.
+- `InstancesTest::test_flag_file_exists_before_up`: current order is up then issue. Uses `Tests\Support\SpyLabRunner`, which records the flag file at the moment `up()` runs. It also checks that flag is the final one.
+- `InstancesTest::test_failed_up_forgets_flag`: spy runner fails `up()`. It first asserts a flag existed at that moment (otherwise `isIssued() == false` would be vacuous, which is why it is red today), then `isIssued` false, status `failed`, no `lab_user` row.
+- `InstancesTest::test_launch_is_refused_at_capacity`: `labs.max_instances=2` is not enforced today (202).
+- `InstancesTest::test_capacity_frees_up_when_an_instance_stops` (extra): red because the third launch is not refused.
+- `DockerLabRunnerTest::test_runner_up_copies_lab_and_down_removes_instance_dir`: no copy, no removal today.
+- `DockerLabRunnerTest::test_up_keeps_a_flag_that_was_issued_before_the_copy_existed` (extra): LaunchLab issues the flag first, which creates `{instance}/lab/flag.txt`; `up()` must still copy the lab and must not overwrite that flag.
+- `DockerLabRunnerTest::test_down_removes_volumes_and_local_images_from_the_instance_copy`.
+
+Assumptions: the copy contains the `docker/storage` and `storage` directories but none of their contents (including subdirectories such as `docker/storage/mysql`); a pre-existing `{instance}/lab` containing only `flag.txt` still gets the lab copied. Capacity counts running instances by project, so a second lab for a user who already runs one counts as new.
+
+Note: with the current implementation, tests that launch labs still write `labs/{slug}/flag.txt` (ignored by git). That goes away with `flagFile` under `labs.instances_path`.

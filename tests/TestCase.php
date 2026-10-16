@@ -11,32 +11,26 @@ use App\Testing\FakeLabRunner;
 use Carbon\CarbonInterface;
 use Database\Seeders\LabSeeder;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Testing\TestResponse;
-use Throwable;
 
 abstract class TestCase extends BaseTestCase
 {
-    /** @var list<string> flag files written by a test, removed in tearDown */
-    private array $flagFiles = [];
+    /** Fresh per test: instance directories and flag files never touch labs/ or storage/. */
+    protected string $instancesDir;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->instancesDir = sys_get_temp_dir().'/appsec-instances-'.bin2hex(random_bytes(6));
+        mkdir($this->instancesDir, 0777, true);
+        config()->set('labs.instances_path', $this->instancesDir);
+    }
 
     protected function tearDown(): void
     {
-        // Phase 3 writes the flag into labs/{slug}/flag.txt: never leave one behind.
-        try {
-            foreach (Lab::query()->get() as $lab) {
-                foreach (User::query()->get() as $user) {
-                    $this->flagFiles[] = app(FlagService::class)->flagFile(app(InstanceResolver::class)->project($user, $lab), $lab);
-                }
-            }
-        } catch (Throwable) {
-            // stubs throw, or no database in this test: nothing to sweep
-        }
-
-        foreach (array_unique($this->flagFiles) as $file) {
-            if (is_file($file)) {
-                @unlink($file);
-            }
-        }
+        File::deleteDirectory($this->instancesDir);
 
         parent::tearDown();
     }
@@ -84,7 +78,6 @@ abstract class TestCase extends BaseTestCase
     protected function flagFor(User $user, Lab $lab): string
     {
         $file = app(FlagService::class)->flagFile($this->projectFor($user, $lab), $lab);
-        $this->flagFiles[] = $file;
 
         return trim((string) file_get_contents($file));
     }
