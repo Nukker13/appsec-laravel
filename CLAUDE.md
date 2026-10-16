@@ -122,6 +122,7 @@ Cache keys (Redis store, logical names):
 ## Observable behaviour (fixed 2026-10-16 for the phase 2 tests)
 
 - Error flash key is `error` (`redirect()->route('home')->with('error', …)`).
+- OAuth callback: users are matched by `google_id` only. It refuses (redirect `home` + `error`, nothing written) when Google's raw `email_verified` is not `true`, and when the email already belongs to a user with a different `google_id`. `user:promote`/`user:demote` look users up by email, so an unverified email must never reach the table.
 - `labs.launch` always dispatches `LaunchLab` (it refreshes `last_seen` and the user's progress even when the instance runs), sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does, for the launching user, even when the instance is already running.
 - `labs.status`: missing status key → `stopped`. `url` is present only when the status is `ready`.
 - `labs.hints`: no `lab_user` row (never launched) → `{hints: []}`. `next_at` is ISO 8601 and is omitted when every hint is released.
