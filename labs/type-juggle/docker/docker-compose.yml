@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: ""
+      dockerfile: Dockerfile
+    restart: no
+    working_dir: /labs/type_juggle
+    volumes:
+      - ../:/labs/type_juggle
+  nginx:
+    image: nginx:1.29
+    restart: no
+    volumes:
+      - ../:/labs/type_juggle
+      - ./nginx:/etc/nginx/conf.d
+    networks:
+      - default
+      - labs_proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=labs_proxy
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${LAB_HOST}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=80
+
+networks:
+  labs_proxy:
+    external: true

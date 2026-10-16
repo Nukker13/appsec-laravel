@@ -110,5 +110,24 @@ sequenceDiagram
 
 **Failure handling.** If `up` throws `LabRunnerException`, `LaunchLab` logs the error, sets status `failed`, issues no flag and creates no `lab_user` row (so the hint clock does not start). `LaunchLab` then runs a best-effort `down` (its own failure is only logged) so no partial stack survives; the project stays in `labs:running`, so the reaper retries if that `down` failed. When a launch finds the instance running but no flag hash in cache (TTL expired by repeated relaunches), it re-issues a fresh flag (`FlagService::isIssued`) before setting `ready`; an instance is never `ready` without a valid flag. A new launch retries (status goes `pending`, then `starting`). A lock timeout is not a failure: the job is released back to the queue. In phase 3 the instance is shared per lab, so one student's correct flag stops it for everyone on that lab; phase 6 removes this by changing only `InstanceResolver::project()`.
 
+### Labs
+
+**Compose file rules:** Each lab's `labs/{slug}/docker/docker-compose.yml` follows these constraints:
+
+- **No stopper service** (defect D10): the old `stopper` service that mounted `/var/run/docker.sock` is removed entirely. Instance cleanup is handled by `labs:reap`.
+- **No `container_name`:** services use their service name as the hostname. Phase 3 sets `COMPOSE_PROJECT_NAME` to `lab_{slug}` per lab; phase 6 will set it to `lab_{slug}_u{user_id}` per user.
+- **No published host ports:** all services except the entry service have no `ports:` section. The entry service has no host-side port either; routing is entirely through Traefik.
+- **Entry service on `labs_proxy`:** exactly one service (e.g. `nginx` for most labs, `app` for ssrf) joins both `default` (internal) and the external `labs_proxy` network. It carries Traefik labels with a Host rule using `${LAB_HOST}` (set by `LabRunner` to `lab_{project with - for _}.labs.localhost`).
+- **Traefik labels:** the entry service advertises itself with labels keyed by `${COMPOSE_PROJECT_NAME}`:
+  - `traefik.enable=true`
+  - `traefik.docker.network=labs_proxy`
+  - `traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(\`${LAB_HOST}\`)`
+  - `traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=web`
+  - `traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port={80 or 8080}`
+
+**Network aliases:** when lab code references an old `container_name` (e.g. `http://ssrf_admin:9090`), the service is given an alias on its network instead of a fixed name. For example, the ssrf admin service has `networks: labnet: aliases: [ssrf_admin]`, allowing the app to reach it by the old name without editing lab code.
+
+**Flag delivery:** each lab stores `flag.txt` at a known path inside its instance (either app root or a documented location within `labs/{slug}/`). The platform writes the plaintext flag to `labs/{slug}/flag.txt` on the host; bind mounts (`../:/labs/{slug}`) make it visible to containers. Lab code reads it via file operations or HTTP endpoints exposed by the same instance, and submits the flag through the platform's `/labs/{slug}/flag` endpoint.
+
 ### Admin
 _To be written by the Admin track._

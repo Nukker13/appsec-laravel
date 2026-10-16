@@ -1,0 +1,45 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        APP_DIR: app
+    restart: no
+    environment:
+      PORT: "8080"
+    depends_on:
+      - admin
+    networks:
+      labnet:
+      labs_proxy:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=labs_proxy
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${LAB_HOST}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=8080
+  admin:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        APP_DIR: admin
+    restart: no
+    environment:
+      PORT: "9090"
+    volumes:
+      - ../flag.txt:/labs/SSRF/flag.txt:ro
+    networks:
+      labnet:
+        aliases:
+          - ssrf_admin
+
+networks:
+  labnet:
+    driver: bridge
+  labs_proxy:
+    external: true
+
+
+

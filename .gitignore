@@ -31,3 +31,11 @@ client_credentials.json
 /storage/**/flag.txt
 flag.txt
 .phpunit.cache
+
+# Labs
+labs/**/vendor/
+labs/**/composer.lock
+labs/**/flag.txt
+labs/**/users.db
+labs/**/docker/storage/
+labs/**/storage/
