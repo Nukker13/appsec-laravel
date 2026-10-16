@@ -15,6 +15,8 @@ Source: `../../Git/backend_project_private` (custom PHP MVC). Facts: [`CODEBASE-
 - 2026-10-16 [stated] The original DB is lost. Slugs = file names in `views/labs/`. Names and categories are recovered from each view's `<h1>` and category badge (table in phase 0).
 - 2026-10-16 [stated] Phase 6 (per-user instances) ships in the first public version.
 - 2026-10-16 [stated] No lab solutions in the docs; the labs are elementary. `docs/labs/{slug}.md` describes the vulnerability class and the setup only.
+- 2026-10-16 Phase 1 review: platform services stay off `labs_proxy` (php-fpm was reachable from lab containers → docker.sock → host root). Only Traefik and lab entry services join it.
+- 2026-10-16 Before phase 2 the orchestrator fixed the observable behaviour the tests rely on (CLAUDE.md → "Observable behaviour"), added `FlagService::flagFile()` so tests never hard-code the flag path, and added a process-factory seam to `DockerLabRunner` for D11 unit tests.
 - 2026-10-16 Every lab publishes host port 80 (XSS/OAuth labs also 3307), so two different labs can't run at once. That collision is the real reason v1 stops other labs. Host ports are therefore replaced with Traefik routing already in phase 3, not in phase 6.
 
 ---

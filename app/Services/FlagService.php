@@ -25,4 +25,10 @@ class FlagService
     {
         throw new \LogicException('not implemented');
     }
+
+    /** Absolute path of the instance flag file. Phase 3: labs/{slug}/flag.txt; phase 6: storage/app/instances/{project}/flag.txt. */
+    public function flagFile(string $project, Lab $lab): string
+    {
+        throw new \LogicException('not implemented');
+    }
 }

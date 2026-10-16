@@ -86,13 +86,14 @@ interface LabRunner
 }
 ```
 
-- `App\Services\DockerLabRunner implements LabRunner` uses Symfony Process with an argument array, and rejects a slug that is not in `labs`.
+- `App\Services\DockerLabRunner implements LabRunner` uses Symfony Process with an argument array, and rejects a slug that is not in `labs` (throws `App\Exceptions\LabRunnerException` before any process is created). Constructor: `__construct(?\Closure $processFactory = null)`; the factory is `fn (array $command, ?string $cwd, array $env): Process` and defaults to `new Process($command, $cwd, $env)`. Every process is created through it (test seam). `Process::fromShellCommandline` is never used.
 - `App\Testing\FakeLabRunner implements LabRunner` records calls in memory; bound in tests.
 - `App\Services\InstanceResolver::project(User $user, Lab $lab): string` returns `lab_{slug with - → _}` in phase 3 and `lab_{slug}_u{user_id}` in phase 6. Everything instance-related is keyed by this project name, so phase 6 only changes this method.
 - `App\Services\FlagService`:
   - `issue(string $project, Lab $lab): void`: random 32-byte hex flag, writes the plaintext to the instance flag file, stores the sha256 in cache.
   - `verify(string $project, string $submitted): bool`: `hash_equals` against the stored hash.
   - `forget(string $project): void`.
+  - `flagFile(string $project, Lab $lab): string`: absolute path of the instance flag file. Phase 3: `labs/{slug}/flag.txt` (what the labs read today). Phase 6: `storage/app/instances/{project}/flag.txt`. Tests read the plaintext through this method, never through a hard-coded path.
 - `App\Services\HintService::due(LabProgress $progress): array`: reads `config/hints.php` (`[slug => [['after' => 2, 'text' => '…'], …]]`, minutes after `started_at`).
 
 ## Lab instance routing
@@ -117,6 +118,18 @@ Cache keys (Redis store, logical names):
 | `lab:{project}:last_seen` | unix timestamp | none |
 | `lab:{project}:lock` | atomic lock | 120 s |
 | `labs:running` | set of running project names (for the reaper) | none |
+
+## Observable behaviour (fixed 2026-10-16 for the phase 2 tests)
+
+- Error flash key is `error` (`redirect()->route('home')->with('error', …)`).
+- `labs.launch` dispatches `LaunchLab`, sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does.
+- `labs.status`: missing status key → `stopped`. `url` is present only when the status is `ready`.
+- `labs.hints`: no `lab_user` row (never launched) → `{hints: []}`. `next_at` is ISO 8601 and is omitted when every hint is released.
+- `labs.flag`: request field `flag` (required string, else 422). Every non-throttled submission writes one `flag_attempts` row. A correct flag sets the user's `lab_user` to `completed` + `completed_at`, then dispatches `StopLab`. No issued flag → `{correct: false}`.
+- `LaunchLab` when the lock is held by another owner: it never calls `LabRunner::up`; it waits with `block()` up to 10 s, then releases itself back to the queue.
+- `user:promote` / `user:demote`: exit code 0 on success, 1 when the email is unknown.
+- Admin override `reset` deletes the user's `lab_user` row (flag attempts are kept as history). `complete` upserts `status=completed`, `completed_at=now`, `started_at` kept or `now` if absent. Both write `meta` = the previous pivot state (or `null`). The audit row is written through the `AdminAction` model inside the transaction.
+- Unknown `?category` on `labs.index` → validation error (redirect with errors / 422 for JSON). Missing category = all labs.
 
 ## Admin metrics
 
