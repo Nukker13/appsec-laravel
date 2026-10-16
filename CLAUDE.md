@@ -67,6 +67,8 @@ docker compose exec app vendor/bin/pint --test
 | POST | `/admin/users/{user}/labs/{lab:slug}/reset` | `admin.progress.reset` | auth, can:admin | redirect back; `reason` required |
 | POST | `/admin/users/{user}/labs/{lab:slug}/complete` | `admin.progress.complete` | auth, can:admin | redirect back; `reason` required |
 
+Admin routes are declared `withoutScopedBindings()`: `{lab:slug}` is not scoped to `{user}`'s labs.
+
 Rate limiter `flag-check`: 10 per minute, keyed `user_id:lab_id`.
 
 ## Services and contracts
