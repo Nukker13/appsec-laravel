@@ -1,0 +1,60 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: no
+    working_dir: /labs/reflect_xss
+    volumes:
+      - ../:/labs/reflect_xss:delegated
+      - ./storage/tmp:/tmp
+  nginx:
+    image: nginx:1.29
+    restart: no
+    volumes:
+      - ../:/labs/reflect_xss
+      - ./nginx:/etc/nginx/conf.d
+    networks:
+      - default
+      - labs_proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=labs_proxy
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${LAB_HOST}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=80
+  db:
+    image: mysql:8.0
+    volumes:
+      - ./storage/mysql:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    restart: no
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+  selenium:
+    image: seleniarm/standalone-chromium:latest
+    shm_size: 512m
+    depends_on:
+      - nginx
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4444/status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    depends_on:
+      selenium:
+        condition: service_healthy
+      nginx:
+        condition: service_started
+
+networks:
+  labs_proxy:
+    external: true
+
+
+
+
