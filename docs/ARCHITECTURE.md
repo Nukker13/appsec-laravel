@@ -67,7 +67,16 @@ sequenceDiagram
 ## Track sections
 
 ### Auth
-_To be written by the Auth track._
+Flow: `GET /login` (guest) sends the browser to Google through Socialite (scopes `email`, `profile`). Google returns to `GET /auth/google/callback`, which upserts the user by `google_id`, logs in, regenerates the session and redirects to `labs.index`. `POST /logout` logs out, invalidates the session, regenerates the CSRF token and redirects to `home`. Controller: `App\Http\Controllers\Auth\GoogleController`. Admins are made with `user:promote {email}` / `user:demote {email}` (exit 1 for an unknown email).
+
+| Defect | Fix |
+|---|---|
+| D5 (unprotected routes) | `guest`/`auth`/`can:admin` route middleware in `routes/web.php`; guests are redirected to `home` (covered by `AuthTest`). |
+| D6 (callback overwrote role) | The callback writes only `google_id`, `email`, `name`, `last_login_at`. `role` is not fillable and never assigned there; new users get the DB default `user`, existing admins keep their role. Only the artisan commands assign `role`. |
+| D7 (OAuth errors reached the user) | Every `Throwable` from Socialite (`InvalidStateException`, Guzzle `ClientException`, missing `code`, ...) is reported and turned into a redirect to `home` with flash `error`. |
+| D13 (logout without CSRF) | Logout is a `POST` in the `web` group, so CSRF verification applies (419 without token); the session is invalidated and the token regenerated. |
+
+Edge case: a known email arriving with a different `google_id` (recycled or second Google account). The callback refuses the login (redirect to `home` with `error`) and writes nothing. Linking by email would let whoever controls that address take over the account, including an admin, and inserting would violate the unique `email` index. An admin has to resolve it manually.
 
 ### Catalog and hints
 _To be written by the Catalog track._
