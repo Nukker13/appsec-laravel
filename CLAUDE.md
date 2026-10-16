@@ -78,10 +78,10 @@ namespace App\Contracts;
 
 interface LabRunner
 {
-    /** Start compose project $project from labs/{$slug}/docker/docker-compose.yml. Throws LabRunnerException. */
+    /** Start compose project $project from its instance copy of labs/{$slug} (see "Lab instances"). Throws LabRunnerException. */
     public function up(string $slug, string $project): void;
 
-    /** Stop and remove compose project $project and clear labs/{$slug} storage. Idempotent. */
+    /** Stop and remove compose project $project, its volumes and images, and delete its instance directory. Idempotent. */
     public function down(string $slug, string $project): void;
 
     public function isRunning(string $project): bool;
@@ -90,14 +90,21 @@ interface LabRunner
 
 - `App\Services\DockerLabRunner implements LabRunner` uses Symfony Process with an argument array, and rejects a slug that is not in `labs` (throws `App\Exceptions\LabRunnerException` before any process is created). Constructor: `__construct(?\Closure $processFactory = null)`; the factory is `fn (array $command, ?string $cwd, array $env): Process` and defaults to `new Process($command, $cwd, $env)`. Every process is created through it (test seam). `Process::fromShellCommandline` is never used.
 - `App\Testing\FakeLabRunner implements LabRunner` records calls in memory; bound in tests.
-- `App\Services\InstanceResolver::project(User $user, Lab $lab): string` returns `lab_{slug with - → _}` in phase 3 and `lab_{slug}_u{user_id}` in phase 6. Everything instance-related is keyed by this project name, so phase 6 only changes this method.
+- `App\Services\InstanceResolver::project(User $user, Lab $lab): string` returns `lab_{slug with - → _}_u{user_id}` (phase 6; phase 3 used `lab_{slug with - → _}`). Everything instance-related is keyed by this project name, so phase 6 only changes this method.
 - `App\Services\FlagService`:
   - `issue(string $project, Lab $lab): void`: random 32-byte hex flag, writes the plaintext to the instance flag file, stores the sha256 in cache.
   - `verify(string $project, string $submitted): bool`: `hash_equals` against the stored hash.
   - `forget(string $project): void`.
   - `isIssued(string $project): bool`: a hash is stored for the project. `LaunchLab` re-issues when the instance runs but no flag is issued (expired TTL, earlier failure).
-  - `flagFile(string $project, Lab $lab): string`: absolute path of the instance flag file. Phase 3: `labs/{slug}/flag.txt` (what the labs read today). Phase 6: `storage/app/instances/{project}/flag.txt`. Tests read the plaintext through this method, never through a hard-coded path.
+  - `flagFile(string $project, Lab $lab): string`: absolute path of the instance flag file = `{labs.instances_path}/{project}/lab/flag.txt` (the copy's `flag.txt`, where every lab already reads it). Tests read the plaintext through this method, never through a hard-coded path.
 - `App\Services\HintService::due(LabProgress $progress): array`: reads `config/hints.php` (`[slug => [['after' => 2, 'text' => '…'], …]]`, minutes after `started_at`).
+
+## Lab instances (phase 6)
+
+- Instance directory `{labs.instances_path}/{project}/lab` is a copy of `labs/{slug}` made by `DockerLabRunner::up()` when absent (contents of `docker/storage/` and `storage/` are not copied, the directories are). Compose runs from the copy (`-f {copy}/docker/docker-compose.yml`, cwd `{copy}/docker`), so every relative bind mount (`../`, `./storage/mysql`, `./storage/tmp`, ssrf's `../flag.txt`) is per instance. Lab files are never edited for this.
+- `down()` runs `compose down -v --remove-orphans --rmi local`, then deletes `{labs.instances_path}/{project}`. `labs/{slug}` itself is never written at runtime.
+- `labs.launch` answers 503 `{status: "capacity"}` without dispatching when the number of registered running instances is ≥ `labs.max_instances` and this project is not one of them.
+- `labs.instances_path` must be under the host-path mount (default `storage/app/instances`), see ADR 0001. Tests point it at a temporary directory.
 
 ## Lab instance routing
 
@@ -107,7 +114,7 @@ interface LabRunner
 
 ## Jobs, commands, cache keys
 
-- `App\Jobs\LaunchLab(User, Lab)`: under `Cache::lock("lab:{project}:lock", 120)`: if the instance is not running → status `starting` → `LabRunner::up` → `FlagService::issue` → status `ready`; sets `started_at` on first launch; touches `last_seen`.
+- `App\Jobs\LaunchLab(User, Lab)`: under `Cache::lock("lab:{project}:lock", 120)`: if the instance is not running → status `starting` → `FlagService::issue` → `LabRunner::up` → status `ready` (the flag file must exist before `up`, because ssrf bind-mounts it as a single file); sets `started_at` on first launch; touches `last_seen`.
 - `App\Jobs\StopLab(slug, project)`: `LabRunner::down`, `FlagService::forget`, status `stopped`.
 - `labs:reap` (scheduled every minute): `StopLab` for instances whose `last_seen` is older than `LAB_IDLE_MINUTES` (default 15).
 - `user:promote {email}`, `user:demote {email}`.
@@ -130,7 +137,7 @@ Cache keys (Redis store, logical names):
 - `labs.status`: missing status key → `stopped`. `url` is present only when the status is `ready`.
 - `labs.hints`: no `lab_user` row (never launched) → `{hints: []}`. `next_at` is ISO 8601 and is omitted when every hint is released.
 - `labs.flag`: request field `flag` (required string, else 422). Every non-throttled submission writes one `flag_attempts` row. A correct flag sets the user's `lab_user` to `completed` + `completed_at`, then dispatches `StopLab`. No issued flag → `{correct: false}`.
-- `LaunchLab` when `up` fails: best-effort `down`, status `failed`, no flag, no `lab_user` row.
+- `LaunchLab` when `up` fails: best-effort `down`, `FlagService::forget`, status `failed`, no `lab_user` row.
 - `LaunchLab` when the lock is held by another owner: it never calls `LabRunner::up`; it waits with `block()` up to 10 s, then releases itself back to the queue.
 - `user:promote` / `user:demote`: exit code 0 on success, 1 when the email is unknown.
 - Admin override `reset` deletes the user's `lab_user` row (flag attempts are kept as history). `complete` upserts `status=completed`, `completed_at=now`, `started_at` kept or `now` if absent. Both write `meta` = the previous pivot state (or `null`). Order inside the one transaction: progress change first, then the audit row through the `AdminAction` model (so a failing audit insert must roll the change back).
