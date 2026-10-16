@@ -56,8 +56,9 @@ class LaunchLab implements ShouldQueue
         try {
             if (! $runner->isRunning($project)) {
                 $registry->setStatus($project, 'starting');
-                $runner->up($this->lab->slug, $project);
+                // The flag file must exist before up(): ssrf bind-mounts it as a single file.
                 $flags->issue($project, $this->lab);
+                $runner->up($this->lab->slug, $project);
             } elseif (! $flags->isIssued($project)) {
                 // Running without a valid flag (expired TTL, or left over from a failed launch): never report ready.
                 $flags->issue($project, $this->lab);
@@ -69,6 +70,7 @@ class LaunchLab implements ShouldQueue
             } catch (LabRunnerException $downError) {
                 Log::error('Lab cleanup after failed launch failed.', ['project' => $project, 'error' => $downError->getMessage()]);
             }
+            $flags->forget($project);
             $registry->setStatus($project, 'failed');
             Log::error('Lab launch failed.', ['project' => $project, 'user_id' => $this->user->getKey(), 'error' => $e->getMessage()]);
 

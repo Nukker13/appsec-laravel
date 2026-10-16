@@ -13,7 +13,8 @@ use Symfony\Component\Process\Process;
 /**
  * Drives docker compose through Symfony Process with an argument array. Rejects slugs that are not in the labs table.
  *
- * up() sets env COMPOSE_PROJECT_NAME={project}, LAB_HOST={project with _ replaced by -}.labs.localhost and LAB_FLAG_FILE.
+ * up() copies the lab to {labs.instances_path}/{project}/lab and runs compose there; down() removes it again.
+ * Both set env COMPOSE_PROJECT_NAME={project}, LAB_HOST={project with _ replaced by -}.labs.localhost and LAB_FLAG_FILE.
  */
 class DockerLabRunner implements LabRunner
 {
@@ -33,37 +34,44 @@ class DockerLabRunner implements LabRunner
     private const TIMEOUT = 150;
 
     /**
+     * Copies labs/{slug} to the instance directory when absent, then runs compose from the copy.
+     *
      * @throws LabRunnerException
      */
     public function up(string $slug, string $project): void
     {
         $lab = $this->lab($slug);
+        $copy = $this->instanceCopy($project);
+
+        $this->copyLab($slug, $copy);
 
         $this->run(
-            ['docker', 'compose', '-f', $this->composeFile($slug), '-p', $project, 'up', '-d', '--build', '--wait'],
-            $slug,
+            ['docker', 'compose', '-f', $copy.'/docker/docker-compose.yml', '-p', $project, 'up', '-d', '--build', '--wait'],
+            $copy.'/docker',
             $this->environment($project, $lab),
         );
     }
 
     /**
+     * Idempotent. Runs compose down from the instance copy (from the original compose file when the copy is gone),
+     * then deletes the instance directory.
+     *
      * @throws LabRunnerException
      */
     public function down(string $slug, string $project): void
     {
         $lab = $this->lab($slug);
+        $copy = $this->instanceCopy($project);
+
+        $directory = is_file($copy.'/docker/docker-compose.yml') ? $copy : $this->labDirectory($slug);
 
         $this->run(
-            ['docker', 'compose', '-f', $this->composeFile($slug), '-p', $project, 'down', '-v', '--remove-orphans'],
-            $slug,
+            ['docker', 'compose', '-f', $directory.'/docker/docker-compose.yml', '-p', $project, 'down', '-v', '--remove-orphans', '--rmi', 'local'],
+            $directory.'/docker',
             $this->environment($project, $lab),
         );
 
-        $base = $this->labDirectory($slug);
-        $filesystem = new Filesystem;
-        foreach ([$base.'/docker/storage', $base.'/storage'] as $directory) {
-            $this->emptyDirectory($filesystem, $directory);
-        }
+        (new Filesystem)->deleteDirectory($this->instanceDirectory($project));
     }
 
     public function isRunning(string $project): bool
@@ -95,9 +103,55 @@ class DockerLabRunner implements LabRunner
         return rtrim(config()->string('labs.path'), '/').'/'.$slug;
     }
 
-    private function composeFile(string $slug): string
+    private function instanceDirectory(string $project): string
     {
-        return $this->labDirectory($slug).'/docker/docker-compose.yml';
+        return rtrim(config()->string('labs.instances_path'), '/').'/'.$project;
+    }
+
+    private function instanceCopy(string $project): string
+    {
+        return $this->instanceDirectory($project).'/lab';
+    }
+
+    /**
+     * Copy labs/{slug} to $copy unless it is already there. Runtime state (contents of docker/storage and storage) is
+     * not copied, the directories are. An existing flag.txt (issued before up) is never overwritten.
+     */
+    private function copyLab(string $slug, string $copy): void
+    {
+        $filesystem = new Filesystem;
+
+        if (is_file($copy.'/docker/docker-compose.yml')) {
+            return;
+        }
+
+        $source = $this->labDirectory($slug);
+        if (! $filesystem->isDirectory($source)) {
+            throw new LabRunnerException('Lab directory is missing.');
+        }
+
+        $filesystem->ensureDirectoryExists($copy);
+
+        foreach ($filesystem->allFiles($source, true) as $file) {
+            $relative = $file->getRelativePathname();
+
+            if (str_starts_with($relative, 'docker/storage/') || str_starts_with($relative, 'storage/')) {
+                continue;
+            }
+
+            $target = $copy.'/'.$relative;
+            if ($relative === 'flag.txt' && is_file($target)) {
+                continue;
+            }
+
+            $filesystem->ensureDirectoryExists(dirname($target));
+            if (! $filesystem->copy($file->getPathname(), $target)) {
+                throw new LabRunnerException('Could not copy the lab files.');
+            }
+        }
+
+        $filesystem->ensureDirectoryExists($copy.'/docker/storage');
+        $filesystem->ensureDirectoryExists($copy.'/storage');
     }
 
     /**
@@ -118,9 +172,9 @@ class DockerLabRunner implements LabRunner
      *
      * @throws LabRunnerException
      */
-    private function run(array $command, string $slug, array $env): void
+    private function run(array $command, string $cwd, array $env): void
     {
-        $process = $this->process($command, $this->labDirectory($slug).'/docker', $env);
+        $process = $this->process($command, $cwd, $env);
         $process->setTimeout(self::TIMEOUT);
 
         try {
@@ -131,24 +185,6 @@ class DockerLabRunner implements LabRunner
 
         if (! $process->isSuccessful()) {
             throw new LabRunnerException('docker compose failed (exit '.$process->getExitCode().'): '.trim($process->getErrorOutput()));
-        }
-    }
-
-    /** Remove everything below $directory except .gitkeep; the directory itself stays. */
-    private function emptyDirectory(Filesystem $filesystem, string $directory): void
-    {
-        if (! $filesystem->isDirectory($directory)) {
-            return;
-        }
-
-        foreach ($filesystem->directories($directory) as $child) {
-            $filesystem->deleteDirectory($child);
-        }
-
-        foreach ($filesystem->files($directory, true) as $file) {
-            if ($file->getFilename() !== '.gitkeep') {
-                $filesystem->delete($file->getPathname());
-            }
         }
     }
 
