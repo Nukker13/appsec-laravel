@@ -36,36 +36,68 @@
         });
     }
 
-    // ---- Launch / status ----
+    // ---- Launch / status (autostarts on page load) ----
+    var autoOpened = false; // auto-open at most once per ready transition
+
+    function setLoading(on) { $('launchSpinner').hidden = !on; }
+
+    function stopWithMessage(msg) {
+        clearTimeout(statusTimer);
+        readySince = null;
+        setLoading(false);
+        $('openLab').hidden = true;
+        $('launchNote').hidden = true;
+        $('launchStatus').textContent = msg;
+    }
+
     function showStatus(data) {
         var label = $('launchStatus');
         var link = $('openLab');
-        label.textContent = data.status;
 
         if (data.status === 'ready' && data.url) {
             if (readySince === null) { readySince = Date.now(); }
             var wait = OPEN_DELAY_MS - (Date.now() - readySince);
             if (wait > 0) {
-                label.textContent = 'ready (warming up)';
+                setLoading(true);
+                label.textContent = 'Almost ready (warming up)...';
                 schedulePoll(wait);
                 return;
             }
+            setLoading(false);
             link.href = data.url;
-            link.hidden = false;
+            link.hidden = false; // always give a manual way in
             $('launchNote').hidden = false;
-            $('launchBtn').disabled = false;
+            if (!autoOpened) {
+                autoOpened = true;
+                // Not a user gesture, so popup blockers may refuse; the visible link is the fallback.
+                var w = window.open(data.url, '_blank', 'noopener');
+                if (w) {
+                    label.textContent = 'Lab is ready and opened in a new tab.';
+                } else {
+                    label.textContent = 'Lab is ready. Your browser blocked the new tab, click Open lab.';
+                    link.classList.add('open-fallback');
+                }
+            }
             return;
         }
 
         readySince = null;
+        autoOpened = false;
         link.hidden = true;
+        link.classList.remove('open-fallback');
         $('launchNote').hidden = true;
 
         if (data.status === 'pending' || data.status === 'starting') {
-            $('launchBtn').disabled = true;
+            setLoading(true);
+            label.textContent = data.status === 'pending' ? 'Queued, starting soon...' : 'Starting lab...';
             schedulePoll(POLL_MS);
+        } else if (data.status === 'failed') {
+            stopWithMessage('Lab failed to start.');
         } else {
-            $('launchBtn').disabled = false;
+            // stopped / unknown: nothing running, keep waiting for the launch we just requested
+            setLoading(true);
+            label.textContent = 'Starting lab...';
+            schedulePoll(POLL_MS);
         }
     }
 
@@ -78,17 +110,25 @@
         getJson(urls.status).then(showStatus).catch(function () { schedulePoll(POLL_MS * 2); });
     }
 
-    $('launchBtn').addEventListener('click', function () {
-        this.disabled = true;
-        readySince = null;
-        postJson(urls.launch).then(function (r) { return r.json(); }).then(function (data) {
-            showStatus(data);
-            schedulePoll(POLL_MS);
+    function launch() {
+        setLoading(true);
+        $('launchStatus').textContent = 'Starting lab...';
+        postJson(urls.launch).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) { return { code: r.status, data: data }; });
+        }).then(function (res) {
+            if (res.code === 503 || res.data.status === 'capacity') {
+                stopWithMessage('No free lab slots, try again shortly.');
+                return;
+            }
+            if (res.code >= 400) {
+                stopWithMessage('Could not start the lab (' + res.code + ').');
+                return;
+            }
+            showStatus(res.data);
         }).catch(function () {
-            $('launchStatus').textContent = 'failed';
-            $('launchBtn').disabled = false;
+            stopWithMessage('Network error while starting the lab.');
         });
-    });
+    }
 
     // ---- Hints (text only ever comes from labs.hints, never from the page HTML) ----
     function renderHints(data) {
@@ -140,6 +180,6 @@
         }).catch(function () { show('error', 'Network error.'); });
     });
 
-    pollStatus();
+    launch();
     loadHints();
 })();

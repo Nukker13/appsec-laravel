@@ -20,11 +20,11 @@
         <div class="card-header">Lab instance</div>
         <div class="card-body">
             <div class="actions">
-                <button type="button" id="launchBtn" class="btn btn-primary">Launch</button>
-                <span id="launchStatus" aria-live="polite"></span>
-                <a id="openLab" class="btn btn-secondary" href="#" target="_blank" rel="noopener noreferrer" hidden>Open lab</a>
+                <span id="launchSpinner" class="spinner" aria-hidden="true" hidden></span>
+                <span id="launchStatus" aria-live="polite">Starting lab...</span>
+                <a id="openLab" class="btn btn-primary" href="#" target="_blank" rel="noopener noreferrer" hidden>Open lab</a>
             </div>
-            <p id="launchNote" hidden>If the page shows a 404 right after opening, wait a couple of seconds and reload.</p>
+            <p id="launchNote" hidden>The lab opens in a new tab. If your browser blocked it, use the Open lab button. If the page shows a 404 right after opening, wait a couple of seconds and reload.</p>
         </div>
     </div>
 

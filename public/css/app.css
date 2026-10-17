@@ -176,6 +176,24 @@ header h1 {
     gap: var(--spacing-5);
 }
 
+/* Content placed directly in <main> (home/login) gets the same gutter as .container; containers are left alone to avoid double padding. */
+main > :not(.container) { padding-left: var(--spacing-6); padding-right: var(--spacing-6); }
+
+/* ─── Lab launch loader ─── */
+.spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 3px solid var(--color-border-default, #ccc);
+    border-top-color: var(--color-bg-brand);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+.spinner[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+#openLab.open-fallback { font-weight: 600; }
+
 /* ─── Card ─── */
 .card {
     background: var(--color-bg-primary);
@@ -285,6 +303,7 @@ pre code { font-size: var(--body-sm-size); font-family: var(--font-family-mono);
 @media (max-width: 767px) {
     header { padding: var(--spacing-4) var(--spacing-5); flex-wrap: wrap; }
     .container { margin: var(--spacing-5) auto; padding: 0 var(--spacing-4); }
+    main > :not(.container) { padding-left: var(--spacing-4); padding-right: var(--spacing-4); }
     .actions { flex-direction: column; align-items: stretch; }
     .actions .btn { text-align: center; }
     .flag-row { flex-direction: column; }
