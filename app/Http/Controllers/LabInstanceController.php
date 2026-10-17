@@ -20,10 +20,10 @@ class LabInstanceController extends Controller
         $user = $request->user();
         $project = $this->resolver->project($user, $lab);
 
-        $running = $this->registry->running();
-        if (! array_key_exists($project, $running) && count($running) >= config()->integer('labs.max_instances')) {
+        if (! $this->registry->reserve($project, $lab->slug, config()->integer('labs.max_instances'))) {
             return response()->json(['status' => 'capacity'], 503);
         }
+        $this->registry->touch($project);
 
         if (! in_array($this->registry->status($project), ['starting', 'ready'], true)) {
             $this->registry->setStatus($project, 'pending');

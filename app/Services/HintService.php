@@ -7,9 +7,9 @@ use App\Models\LabProgress;
 use Carbon\CarbonInterface;
 
 /**
- * Hints released so far for a progress row, from config/hints.php (minutes after started_at).
+ * Hints released so far for a progress row, from config/hints.php (minutes after the current instance launch).
  *
- * A hint is released when now >= started_at + after. The schedule is read in config order and
+ * A hint is released when now >= since + after. The schedule is read in config order and
  * numbered from 1 by its position, so numbering stays stable as more hints are released.
  */
 class HintService
@@ -17,13 +17,13 @@ class HintService
     /**
      * @return list<array{n: int, text: string}>
      */
-    public function due(LabProgress $progress): array
+    public function due(LabProgress $progress, CarbonInterface $since): array
     {
         $now = now();
         $due = [];
 
         foreach ($this->schedule($progress) as $i => $hint) {
-            if ($now->greaterThanOrEqualTo($this->releaseAt($progress, $hint['after']))) {
+            if ($now->greaterThanOrEqualTo($since->copy()->addMinutes($hint['after']))) {
                 $due[] = ['n' => $i + 1, 'text' => $hint['text']];
             }
         }
@@ -34,24 +34,19 @@ class HintService
     /**
      * Release time of the earliest hint that is not yet released, or null when all are out.
      */
-    public function nextAt(LabProgress $progress): ?CarbonInterface
+    public function nextAt(LabProgress $progress, CarbonInterface $since): ?CarbonInterface
     {
         $now = now();
         $next = null;
 
         foreach ($this->schedule($progress) as $hint) {
-            $at = $this->releaseAt($progress, $hint['after']);
+            $at = $since->copy()->addMinutes($hint['after']);
             if ($at->greaterThan($now) && ($next === null || $at->lessThan($next))) {
                 $next = $at;
             }
         }
 
         return $next;
-    }
-
-    private function releaseAt(LabProgress $progress, int $afterMinutes): CarbonInterface
-    {
-        return $progress->started_at->copy()->addMinutes($afterMinutes);
     }
 
     /**

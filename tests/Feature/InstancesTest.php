@@ -6,6 +6,7 @@ use App\Contracts\LabRunner;
 use App\Jobs\LaunchLab;
 use App\Models\User;
 use App\Services\FlagService;
+use App\Services\InstanceRegistry;
 use App\Testing\FakeLabRunner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -143,6 +144,28 @@ class InstancesTest extends TestCase
         // Relaunching an instance one already has is not a new instance.
         $this->actingAs($alice)->postJson(route('labs.launch', $this->lab('osci')))->assertStatus(202);
         Queue::assertPushed(LaunchLab::class, 1);
+    }
+
+    public function test_capacity_slot_is_reserved_at_request_time_not_in_the_job(): void
+    {
+        config()->set('labs.max_instances', 2);
+        Queue::fake();
+        $alice = User::factory()->create();
+        $bob = User::factory()->create();
+        $carol = User::factory()->create();
+
+        // No job ever runs (Queue::fake): the slot must be taken by the controller itself.
+        $this->actingAs($alice)->postJson(route('labs.launch', $this->lab('osci')))->assertStatus(202);
+        $this->actingAs($bob)->postJson(route('labs.launch', $this->lab('dom-xss')))->assertStatus(202);
+        Queue::assertPushed(LaunchLab::class, 2);
+
+        $this->actingAs($carol)->postJson(route('labs.launch', $this->lab('rbac')))
+            ->assertStatus(503)
+            ->assertExactJson(['status' => 'capacity']);
+
+        Queue::assertPushed(LaunchLab::class, 2);
+        $this->assertCount(2, app(InstanceRegistry::class)->running());
+        $this->assertArrayNotHasKey($this->projectFor($carol, $this->lab('rbac')), app(InstanceRegistry::class)->running());
     }
 
     public function test_capacity_frees_up_when_an_instance_stops(): void

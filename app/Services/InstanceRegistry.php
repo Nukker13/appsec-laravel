@@ -39,6 +39,44 @@ class InstanceRegistry
         return is_numeric($value) ? (int) $value : null;
     }
 
+    public function markLaunched(string $project): void
+    {
+        Cache::forever("lab:{$project}:launched_at", now()->timestamp);
+    }
+
+    public function launchedAt(string $project): ?int
+    {
+        $value = Cache::get("lab:{$project}:launched_at");
+
+        return is_numeric($value) ? (int) $value : null;
+    }
+
+    public function clearLaunched(string $project): void
+    {
+        Cache::forget("lab:{$project}:launched_at");
+    }
+
+    /**
+     * Atomically claim a capacity slot: true when the project already holds one or a free slot was taken.
+     */
+    public function reserve(string $project, string $slug, int $max): bool
+    {
+        $reserved = Cache::lock(self::RUNNING_KEY.':lock', 10)->block(10, function () use ($project, $slug, $max): bool {
+            $running = $this->running();
+
+            if (! array_key_exists($project, $running) && count($running) >= $max) {
+                return false;
+            }
+
+            $running[$project] = $slug;
+            Cache::forever(self::RUNNING_KEY, $running);
+
+            return true;
+        });
+
+        return $reserved === true;
+    }
+
     public function register(string $project, string $slug): void
     {
         $this->mutate(function (array $running) use ($project, $slug): array {

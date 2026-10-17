@@ -28,6 +28,7 @@ class StopLab implements ShouldQueue
             Cache::lock("lab:{$this->project}:lock", 120)->block(10, function () use ($runner, $flags, $registry): void {
                 $runner->down($this->slug, $this->project);
                 $flags->forget($this->project);
+                $registry->clearLaunched($this->project);
                 $registry->setStatus($this->project, 'stopped');
                 $registry->unregister($this->project);
             });

@@ -37,7 +37,7 @@ docker compose exec app vendor/bin/pint --test
 
 `LabSeeder` data (10 labs, slug/name/category/sort) is in `docs/MIGRATION-PLAN.md` → Phase 0. The original DB is lost, so that table is the source of truth.
 
-`lab_user.started_at` is set on the **first launch** (not on page view) and is never overwritten by later launches. It drives the hint schedule.
+`lab_user.started_at` is set on the **first launch** (not on page view) and is never overwritten by later launches. It drives the admin solve-time metric (not the hint schedule, which follows the current instance's `launched_at` — see HintService).
 
 ## Models
 
@@ -97,13 +97,14 @@ interface LabRunner
   - `forget(string $project): void`.
   - `isIssued(string $project): bool`: a hash is stored for the project. `LaunchLab` re-issues when the instance runs but no flag is issued (expired TTL, earlier failure).
   - `flagFile(string $project, Lab $lab): string`: absolute path of the instance flag file = `{labs.instances_path}/{project}/lab/flag.txt` (the copy's `flag.txt`, where every lab already reads it). Tests read the plaintext through this method, never through a hard-coded path.
-- `App\Services\HintService::due(LabProgress $progress): array`: reads `config/hints.php` (`[slug => [['after' => 2, 'text' => '…'], …]]`, minutes after `started_at`).
+- `App\Services\HintService::due(LabProgress $progress, CarbonInterface $since): array` and `nextAt(LabProgress $progress, CarbonInterface $since): ?CarbonInterface`: reads `config/hints.php` (`[slug => [['after' => 2, 'text' => '…'], …]]`), minutes after `$since`. `$since` is the current instance's launch instant (`lab:{project}:launched_at`), **not** the pivot `started_at`: the hint schedule follows the life of the running instance and restarts on every fresh launch. The caller passes the launch instant; with no running instance there are no hints.
+- `App\Services\InstanceRegistry`: cache bookkeeping keyed by project (status, last_seen, the `labs:running` map, and `launched_at`). `reserve(string $project, string $slug, int $max): bool` atomically (under `labs:running:lock`) registers the project and returns `true`, or returns `false` without registering when `running` is already at `$max` and the project is not already one of them — this is the capacity gate, taken at request time so concurrent launches cannot exceed the cap. `markLaunched`/`launchedAt` set and read `lab:{project}:launched_at`; `clearLaunched` removes it.
 
 ## Lab instances (phase 6)
 
 - Instance directory `{labs.instances_path}/{project}/lab` is a copy of `labs/{slug}` made by `DockerLabRunner::up()` when absent (contents of `docker/storage/` and `storage/` are not copied, the directories are). Compose runs from the copy (`-f {copy}/docker/docker-compose.yml`, cwd `{copy}/docker`), so every relative bind mount (`../`, `./storage/mysql`, `./storage/tmp`, ssrf's `../flag.txt`) is per instance. Lab files are never edited for this.
 - `down()` runs `compose down -v --remove-orphans --rmi local`, then deletes `{labs.instances_path}/{project}`. `labs/{slug}` itself is never written at runtime.
-- `labs.launch` answers 503 `{status: "capacity"}` without dispatching when the number of registered running instances is ≥ `labs.max_instances` and this project is not one of them.
+- `labs.launch` answers 503 `{status: "capacity"}` without dispatching when `InstanceRegistry::reserve()` refuses the slot (registered running instances already ≥ `labs.max_instances` and this project is not one of them). The slot is reserved atomically in the controller before dispatch, so N simultaneous launches never bring up more than `labs.max_instances` instances. A reserved slot that never starts (the job never runs) has no `last_seen` and is reclaimed by the reaper.
 - `labs.instances_path` must be under the host-path mount (default `storage/app/instances`), see ADR 0001. Tests point it at a temporary directory.
 
 ## Lab instance routing
@@ -114,8 +115,8 @@ interface LabRunner
 
 ## Jobs, commands, cache keys
 
-- `App\Jobs\LaunchLab(User, Lab)`: under `Cache::lock("lab:{project}:lock", 120)`: if the instance is not running → status `starting` → `FlagService::issue` → `LabRunner::up` → status `ready` (the flag file must exist before `up`, because ssrf bind-mounts it as a single file); sets `started_at` on first launch; touches `last_seen`.
-- `App\Jobs\StopLab(slug, project)`: `LabRunner::down`, `FlagService::forget`, status `stopped`.
+- `App\Jobs\LaunchLab(User, Lab)`: under `Cache::lock("lab:{project}:lock", 120)`: if the instance is not running → status `starting` → `FlagService::issue` → `LabRunner::up` → status `ready` (the flag file must exist before `up`, because ssrf bind-mounts it as a single file); sets `started_at` on first launch; touches `last_seen`. On a fresh bring-up it sets `launched_at` (the hint anchor) to now; a launch that finds the instance already running leaves `launched_at` unchanged.
+- `App\Jobs\StopLab(slug, project)`: `LabRunner::down`, `FlagService::forget`, `clearLaunched`, status `stopped`.
 - `labs:reap` (scheduled every minute): `StopLab` for instances whose `last_seen` is older than `LAB_IDLE_MINUTES` (default 15).
 - `user:promote {email}`, `user:demote {email}`.
 
@@ -126,6 +127,7 @@ Cache keys (Redis store, logical names):
 | `lab:{project}:status` | `pending\|starting\|ready\|stopped\|failed` | none (cleared on stop) |
 | `lab:{project}:flag` | sha256 of the flag | `LAB_MAX_MINUTES` (default 120) |
 | `lab:{project}:last_seen` | unix timestamp | none |
+| `lab:{project}:launched_at` | unix timestamp of the current bring-up (hint anchor) | none (cleared on stop) |
 | `lab:{project}:lock` | atomic lock | 120 s |
 | `labs:running` | set of running project names (for the reaper) | none |
 
@@ -133,9 +135,9 @@ Cache keys (Redis store, logical names):
 
 - Error flash key is `error` (`redirect()->route('home')->with('error', …)`).
 - OAuth callback: users are matched by `google_id` only. It refuses (redirect `home` + `error`, nothing written) when Google's raw `email_verified` is not `true`, and when the email already belongs to a user with a different `google_id`. `user:promote`/`user:demote` look users up by email, so an unverified email must never reach the table.
-- `labs.launch` always dispatches `LaunchLab` (it refreshes `last_seen` and the user's progress even when the instance runs), sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does, for the launching user, even when the instance is already running.
+- `labs.launch` reserves the capacity slot (see above) and, when granted, always dispatches `LaunchLab` (it refreshes `last_seen` and the user's progress even when the instance runs), sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does, for the launching user, even when the instance is already running.
 - `labs.status`: missing status key → `stopped`. `url` is present only when the status is `ready`.
-- `labs.hints`: no `lab_user` row (never launched) → `{hints: []}`. `next_at` is ISO 8601 and is omitted when every hint is released.
+- `labs.hints`: no `lab_user` row (never launched) or no currently running instance (no `launched_at`) → `{hints: []}` with no `next_at`. Otherwise hints are released by minutes since `launched_at` (the current launch), so a stopped-and-relaunched lab starts its hint schedule over. `next_at` is ISO 8601 and is omitted when every hint is released.
 - `labs.flag`: request field `flag` (required string, else 422). Every non-throttled submission writes one `flag_attempts` row. A correct flag sets the user's `lab_user` to `completed` + `completed_at`, then dispatches `StopLab`. No issued flag → `{correct: false}`.
 - `LaunchLab` when `up` fails: best-effort `down`, `FlagService::forget`, status `failed`, no `lab_user` row.
 - `LaunchLab` when the lock is held by another owner: it never calls `LabRunner::up`; it waits with `block()` up to 10 s, then releases itself back to the queue.
