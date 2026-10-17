@@ -1,7 +1,6 @@
 # AppSec CTF Training Platform
 
-[![CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml/badge.svg)](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml)
-<!-- TODO: replace <OWNER>/<REPO> once the remote is set -->
+[![CI](https://github.com/Nukker13/appsec-laravel/actions/workflows/ci.yml/badge.svg)](https://github.com/Nukker13/appsec-laravel/actions/workflows/ci.yml)
 
 Internal application-security CTF training platform. Students sign in with Google, launch a Docker lab, exploit an **intentionally vulnerable** application, and submit the flag they find. Admins track progress per user and per lab. This repository is the Laravel rewrite (v2) of the original custom PHP MVC platform (v1); the defects found in v1 are listed in [Security defects fixed](#security-defects-fixed-v1--v2).
 

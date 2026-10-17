@@ -45,3 +45,8 @@ labs/insec-deser/storage/*
 !labs/insec-deser/storage/invoices/
 labs/insec-deser/storage/invoices/*
 !labs/insec-deser/storage/invoices/.gitkeep
+
+# Local-only files
+/docker-compose.override.yml
+/exploit.php
+/fixes.md
