@@ -192,7 +192,6 @@ main > :not(.container) { padding-left: var(--spacing-6); padding-right: var(--s
 .spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
-#openLab.open-fallback { font-weight: 600; }
 
 /* ─── Card ─── */
 .card {

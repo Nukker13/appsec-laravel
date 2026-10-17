@@ -56,7 +56,8 @@ docker compose exec app vendor/bin/pint --test
 | GET | `/auth/google/callback` | `auth.callback` | guest | redirect `labs.index` (or `home` with error) |
 | POST | `/logout` | `logout` | auth | redirect `home` |
 | GET | `/labs` | `labs.index` | auth | view; `?category=frontend\|backend` (validated) |
-| GET | `/labs/{lab:slug}` | `labs.show` | auth | view |
+| GET | `/labs/{lab:slug}` | `labs.show` | auth | view (does not launch on load) |
+| GET | `/labs/{lab:slug}/open` | `labs.open` | auth | view: loader opened in a new tab; launches, polls, redirects to the lab once ready |
 | POST | `/labs/{lab:slug}/launch` | `labs.launch` | auth | 202 JSON `{status}` |
 | GET | `/labs/{lab:slug}/status` | `labs.status` | auth | JSON `{status, url?}` |
 | GET | `/labs/{lab:slug}/hints` | `labs.hints` | auth | JSON `{hints: [{n, text}], next_at?}` |
@@ -136,6 +137,7 @@ Cache keys (Redis store, logical names):
 - Error flash key is `error` (`redirect()->route('home')->with('error', …)`).
 - OAuth callback: users are matched by `google_id` only. It refuses (redirect `home` + `error`, nothing written) when Google's raw `email_verified` is not `true`, and when the email already belongs to a user with a different `google_id`. `user:promote`/`user:demote` look users up by email, so an unverified email must never reach the table.
 - `labs.launch` reserves the capacity slot (see above) and, when granted, always dispatches `LaunchLab` (it refreshes `last_seen` and the user's progress even when the instance runs), sets status `pending` if the instance is not already `starting|ready`, and returns 202 `{status}` with the current status. It does not create `lab_user`; `LaunchLab` does, for the launching user, even when the instance is already running.
+- `labs.show` does not launch anything on load; the only way to start a lab is the Launch button, which opens `labs.open` in a new tab. `labs.open` is a standalone loader page: on load it POSTs `labs.launch` once, shows a spinner with the live status, polls `labs.status`, and navigates itself to the lab `url` once `ready`; on `capacity` (503) or `failed` it stops with a message and does not redirect. The `labs.show` page keeps the hints and flag UI and stays open alongside the lab tab.
 - `labs.status`: missing status key → `stopped`. `url` is present only when the status is `ready`.
 - `labs.hints`: no `lab_user` row (never launched) or no currently running instance (no `launched_at`) → `{hints: []}` with no `next_at`. Otherwise hints are released by minutes since `launched_at` (the current launch), so a stopped-and-relaunched lab starts its hint schedule over. `next_at` is ISO 8601 and is omitted when every hint is released.
 - `labs.flag`: request field `flag` (required string, else 422). Every non-throttled submission writes one `flag_attempts` row. A correct flag sets the user's `lab_user` to `completed` + `completed_at`, then dispatches `StopLab`. No issued flag → `{correct: false}`.

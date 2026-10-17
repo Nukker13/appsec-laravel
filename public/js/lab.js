@@ -6,17 +6,11 @@
 
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
     var urls = {
-        launch: root.dataset.launchUrl,
-        status: root.dataset.statusUrl,
         hints: root.dataset.hintsUrl,
         flag: root.dataset.flagUrl
     };
     var $ = function (id) { return document.getElementById(id); };
-    var POLL_MS = 2000;
-    var OPEN_DELAY_MS = 2500; // Traefik needs a moment to pick up a new instance
-    var statusTimer = null;
     var hintTimer = null;
-    var readySince = null;
 
     function getJson(url) {
         return fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
@@ -33,100 +27,6 @@
                 'X-CSRF-TOKEN': csrf
             },
             body: JSON.stringify(body || {})
-        });
-    }
-
-    // ---- Launch / status (autostarts on page load) ----
-    var autoOpened = false; // auto-open at most once per ready transition
-
-    function setLoading(on) { $('launchSpinner').hidden = !on; }
-
-    function stopWithMessage(msg) {
-        clearTimeout(statusTimer);
-        readySince = null;
-        setLoading(false);
-        $('openLab').hidden = true;
-        $('launchNote').hidden = true;
-        $('launchStatus').textContent = msg;
-    }
-
-    function showStatus(data) {
-        var label = $('launchStatus');
-        var link = $('openLab');
-
-        if (data.status === 'ready' && data.url) {
-            if (readySince === null) { readySince = Date.now(); }
-            var wait = OPEN_DELAY_MS - (Date.now() - readySince);
-            if (wait > 0) {
-                setLoading(true);
-                label.textContent = 'Almost ready (warming up)...';
-                schedulePoll(wait);
-                return;
-            }
-            setLoading(false);
-            link.href = data.url;
-            link.hidden = false; // always give a manual way in
-            $('launchNote').hidden = false;
-            if (!autoOpened) {
-                autoOpened = true;
-                // Not a user gesture, so popup blockers may refuse; the visible link is the fallback.
-                var w = window.open(data.url, '_blank', 'noopener');
-                if (w) {
-                    label.textContent = 'Lab is ready and opened in a new tab.';
-                } else {
-                    label.textContent = 'Lab is ready. Your browser blocked the new tab, click Open lab.';
-                    link.classList.add('open-fallback');
-                }
-            }
-            return;
-        }
-
-        readySince = null;
-        autoOpened = false;
-        link.hidden = true;
-        link.classList.remove('open-fallback');
-        $('launchNote').hidden = true;
-
-        if (data.status === 'pending' || data.status === 'starting') {
-            setLoading(true);
-            label.textContent = data.status === 'pending' ? 'Queued, starting soon...' : 'Starting lab...';
-            schedulePoll(POLL_MS);
-        } else if (data.status === 'failed') {
-            stopWithMessage('Lab failed to start.');
-        } else {
-            // stopped / unknown: nothing running, keep waiting for the launch we just requested
-            setLoading(true);
-            label.textContent = 'Starting lab...';
-            schedulePoll(POLL_MS);
-        }
-    }
-
-    function schedulePoll(ms) {
-        clearTimeout(statusTimer);
-        statusTimer = setTimeout(pollStatus, ms);
-    }
-
-    function pollStatus() {
-        getJson(urls.status).then(showStatus).catch(function () { schedulePoll(POLL_MS * 2); });
-    }
-
-    function launch() {
-        setLoading(true);
-        $('launchStatus').textContent = 'Starting lab...';
-        postJson(urls.launch).then(function (r) {
-            return r.json().catch(function () { return {}; }).then(function (data) { return { code: r.status, data: data }; });
-        }).then(function (res) {
-            if (res.code === 503 || res.data.status === 'capacity') {
-                stopWithMessage('No free lab slots, try again shortly.');
-                return;
-            }
-            if (res.code >= 400) {
-                stopWithMessage('Could not start the lab (' + res.code + ').');
-                return;
-            }
-            showStatus(res.data);
-        }).catch(function () {
-            stopWithMessage('Network error while starting the lab.');
         });
     }
 
@@ -180,6 +80,5 @@
         }).catch(function () { show('error', 'Network error.'); });
     });
 
-    launch();
     loadHints();
 })();

@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/labs', [LabController::class, 'index'])->name('labs.index');
     Route::get('/labs/{lab:slug}', [LabController::class, 'show'])->name('labs.show');
+    Route::get('/labs/{lab:slug}/open', [LabController::class, 'open'])->name('labs.open');
     Route::post('/labs/{lab:slug}/launch', [LabInstanceController::class, 'launch'])->name('labs.launch');
     Route::get('/labs/{lab:slug}/status', [LabInstanceController::class, 'status'])->name('labs.status');
     Route::get('/labs/{lab:slug}/hints', [HintController::class, 'index'])->name('labs.hints');

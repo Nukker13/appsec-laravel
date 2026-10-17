@@ -36,4 +36,9 @@ class LabController extends Controller
     {
         return view('lab', ['lab' => $lab]);
     }
+
+    public function open(Lab $lab): View
+    {
+        return view('lab-open', ['lab' => $lab]);
+    }
 }
