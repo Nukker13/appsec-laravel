@@ -13,8 +13,8 @@ Command injection is an attack where the goal is execution of arbitrary commands
 
 ## Flag Delivery
 
-Host file `labs/osci/flag.txt` (written by `FlagService::issue`) is visible as `/labs/osci/flag.txt` inside `app`, `nginx` through the bind mount `../:/labs/osci`. Phase 6 mounts the per-instance file (`LAB_FLAG_FILE`) read-only over this path.
+The flag is issued by `FlagService` before the lab starts and written to the per-instance copy at `storage/app/instances/{project}/lab/flag.txt`. The instance directory is bind-mounted into `app` and `nginx`, so the lab reads it at `/labs/osci/flag.txt`.
 
 ## Solvability Test
 
-Phase 5 (pending)
+Verified by hand (QA); there is no automated exploit suite (see CHANGELOG, "Phase 5: skipped").

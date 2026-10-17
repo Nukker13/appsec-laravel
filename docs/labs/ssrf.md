@@ -8,13 +8,13 @@ Server-Side Request Forgery (SSRF) is a vulnerability that allows an attacker to
 
 | Service | Image | Role | Networks | Aliases |
 |---------|-------|------|----------|---------|
-| app | Custom (Dockerfile) | Node.js image proxy, Traefik entry point | labnet, labs_proxy | — |
-| admin | Custom (Dockerfile) | Node.js admin service with flag (port 9090) | labnet | ssrf_admin |
+| app | Custom (Dockerfile) | PHP image proxy, Traefik entry point | labnet, labs_proxy | — |
+| admin | Custom (Dockerfile) | PHP admin service with flag (port 9090) | labnet | ssrf_admin |
 
 ## Flag Delivery
 
-Host file `labs/ssrf/flag.txt` is bind-mounted read-only by the `admin` service at `/labs/SSRF/flag.txt`. Only `admin` (internal network `labnet`, alias `ssrf_admin`) can read it; the public `app` service has no mount of it.
+The flag is issued by `FlagService` before the lab starts and written to the per-instance copy at `storage/app/instances/{project}/lab/flag.txt`. Only the `admin` service bind-mounts it (read-only, `../flag.txt` -> `/labs/SSRF/flag.txt`); the public `app` service has no mount of it, and `admin` is reachable only on the internal network `labnet` (alias `ssrf_admin`).
 
 ## Solvability Test
 
-Phase 5 (pending)
+Verified by hand (QA); there is no automated exploit suite (see CHANGELOG, "Phase 5: skipped").
