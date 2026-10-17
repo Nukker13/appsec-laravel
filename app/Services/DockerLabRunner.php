@@ -136,6 +136,8 @@ class DockerLabRunner implements LabRunner
             $relative = $file->getRelativePathname();
 
             if (str_starts_with($relative, 'docker/storage/') || str_starts_with($relative, 'storage/')) {
+                $filesystem->ensureDirectoryExists(dirname($copy.'/'.$relative));
+
                 continue;
             }
 

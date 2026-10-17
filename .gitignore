@@ -38,3 +38,10 @@ labs/**/flag.txt
 labs/**/users.db
 labs/**/docker/storage/
 labs/**/storage/
+# insec-deser writes invoices to storage/invoices/ at runtime; track only the empty-dir
+# marker so the directory exists on a fresh clone (the generated invoices stay ignored).
+!labs/insec-deser/storage/
+labs/insec-deser/storage/*
+!labs/insec-deser/storage/invoices/
+labs/insec-deser/storage/invoices/*
+!labs/insec-deser/storage/invoices/.gitkeep

@@ -46,7 +46,7 @@ class DockerLabRunnerTest extends TestCase
     private function fakeLab(string $slug): void
     {
         $base = "{$this->labsDir}/{$slug}";
-        foreach (["{$base}/docker/storage/mysql", "{$base}/docker/storage/tmp", "{$base}/storage", "{$base}/src"] as $dir) {
+        foreach (["{$base}/docker/storage/mysql", "{$base}/docker/storage/tmp", "{$base}/storage/invoices", "{$base}/src"] as $dir) {
             mkdir($dir, 0777, true);
         }
         file_put_contents("{$base}/docker/docker-compose.yml", "services:\n  nginx:\n    image: nginx\n");
@@ -55,6 +55,7 @@ class DockerLabRunnerTest extends TestCase
         file_put_contents("{$base}/docker/storage/mysql/ibdata1", 'DATABASE-STATE');
         file_put_contents("{$base}/docker/storage/tmp/session", 'TMP-STATE');
         file_put_contents("{$base}/storage/upload.bin", 'UPLOAD-STATE');
+        file_put_contents("{$base}/storage/invoices/.gitkeep", '');
         file_put_contents("{$base}/src/index.php", '<?php echo 1;');
         file_put_contents("{$base}/flag.txt", 'SOURCE-FLAG');
     }
@@ -152,6 +153,11 @@ class DockerLabRunnerTest extends TestCase
         $this->assertFileDoesNotExist($copy.'/docker/storage/mysql/ibdata1');
         $this->assertFileDoesNotExist($copy.'/docker/storage/tmp/session');
         $this->assertFileDoesNotExist($copy.'/storage/upload.bin');
+        // The directory tree below storage is recreated empty, so runtime paths like storage/invoices/ exist.
+        $this->assertDirectoryExists($copy.'/docker/storage/mysql');
+        $this->assertDirectoryExists($copy.'/docker/storage/tmp');
+        $this->assertDirectoryExists($copy.'/storage/invoices');
+        $this->assertFileDoesNotExist($copy.'/storage/invoices/.gitkeep');
         $this->assertSame($before, $this->snapshot($source), 'labs/{slug} was modified by up().');
 
         // Another user's instance is a separate copy.
