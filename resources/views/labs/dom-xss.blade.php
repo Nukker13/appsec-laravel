@@ -9,16 +9,7 @@
 
 <div class="card">
     <div class="card-header">Vulnerable Code Example</div>
-    <pre><code class="language-php">@verbatim&lt;?php
-require_once 'auth_moderator_or_admin.php';
-$userId = (int)($_GET['id'] ?? 0);
-?&gt;
-&lt;!doctype html&gt;
-&lt;html&gt;
-  &lt;body&gt;
-    &lt;h2&gt;User profile&lt;/h2&gt;
-    &lt;div&gt;Name: &lt;?= $user['username_raw'] ?&gt;&lt;/div&gt;
-    &lt;div&gt;Email: &lt;?= $user['email_raw'] ?&gt;&lt;/div&gt;
-  &lt;/body&gt;
-&lt;/html&gt;@endverbatim</code></pre>
+    <pre><code class="language-javascript">@verbatim// Source: the URL fragment. Sink: innerHTML (no sanitisation)
+const raw = decodeURIComponent(location.hash.slice(1));
+viewer.innerHTML = raw || defaultHtml;@endverbatim</code></pre>
 </div>

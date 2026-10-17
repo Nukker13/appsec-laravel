@@ -7,6 +7,17 @@
 </div>
 
 <div class="card">
+    <div class="card-header">Test accounts</div>
+    <div class="card-body">
+        <p>To connect an account through the provider login, use these student accounts (they belong to this lab only):</p>
+        <ul>
+            <li>Google: <code>student@gmail.com</code> / <code>google123</code></li>
+            <li>Apple: <code>student@icloud.com</code> / <code>apple123</code></li>
+        </ul>
+    </div>
+</div>
+
+<div class="card">
     <div class="card-header">The Vulnerable Implementation</div>
     <pre><code class="language-php">@verbatim// VULNERABLE: state stored globally, not in session
 $state = bin2hex(random_bytes(16));

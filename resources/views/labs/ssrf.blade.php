@@ -8,12 +8,13 @@
 
 <div class="card">
     <div class="card-header">Vulnerable Code Example</div>
-    <pre><code class="language-php">@verbatim// Public app — image proxy endpoint
-$imageUrl = $_GET['url'] ?? '';
+    <pre><code class="language-php">@verbatim// Main page: the server fetches whatever imageUrl points to
+$imageUrl = $_GET['imageUrl'] ?? $defaultImageUrl;
+if (($_GET['action'] ?? '') === 'count') {
+    $data = @file_get_contents($imageUrl);
+}
 
-// VULNERABLE: user-supplied URL is fetched server-side without restriction
-$data = file_get_contents($imageUrl);
-
-header('Content-Type: image/jpeg');
-echo $data;@endverbatim</code></pre>
+// Separate endpoint: GET /proxy?url=...
+$body = @file_get_contents($_GET['url'] ?? '', false, $ctx);
+echo $body;@endverbatim</code></pre>
 </div>

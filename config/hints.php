@@ -33,10 +33,11 @@ return [
         // No hints for RBAC
     ],
     'path-trav' => [
-        ['after' => 2, 'text' => 'Upload a .php file containing shell_exec() to locate the flag — then include it through the file parameter to execute it.'],
+        ['after' => 2, 'text' => 'Uploaded PHP is scanned, but only for command-execution functions. Reading a file does not need one.'],
+        ['after' => 4, 'text' => 'Upload a .php file that reads the flag, then open it through the file parameter so it gets included. Note that the file parameter refuses the word "flag".'],
     ],
     'type-juggle' => [
-        ['after' => 2, 'text' => 'PHP has a concept of "magic hashes" — certain strings that, when hashed, produce a value PHP equals operator treats as numerically equal to zero. Look them up.'],
+        ['after' => 2, 'text' => 'PHP has a concept of "magic hashes" — certain strings that, when hashed, produce a value that the PHP loose equality operator (==) treats as numerically equal to zero. Look them up.'],
         ['after' => 4, 'text' => 'The admin username is admin.'],
     ],
     'insec-deser' => [

@@ -10,15 +10,7 @@
 <div class="card">
     <div class="card-header">Vulnerable Code Example</div>
     <pre><code class="language-php">@verbatim&lt;?php
-require_once 'auth_moderator_or_admin.php';
-$userId = (int)($_GET['id'] ?? 0);
+$msg = $_GET['msg'] ?? '';
 ?&gt;
-&lt;!doctype html&gt;
-&lt;html&gt;
-  &lt;body&gt;
-    &lt;h2&gt;User profile&lt;/h2&gt;
-    &lt;div&gt;Name: &lt;?= $user['username_raw'] ?&gt;&lt;/div&gt;
-    &lt;div&gt;Email: &lt;?= $user['email_raw'] ?&gt;&lt;/div&gt;
-  &lt;/body&gt;
-&lt;/html&gt;@endverbatim</code></pre>
+&lt;strong&gt;&lt;?php echo $msg; ?&gt;&lt;/strong&gt;  &lt;!-- reflected unescaped --&gt;@endverbatim</code></pre>
 </div>
