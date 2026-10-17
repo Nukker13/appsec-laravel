@@ -3,6 +3,9 @@ volumes:
 
 services:
   app:
+    depends_on:
+      db:
+        condition: service_healthy
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -39,6 +42,11 @@ services:
     restart: no
     environment:
       MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   selenium:
     image: seleniarm/standalone-chromium:latest
