@@ -1,3 +1,6 @@
+volumes:
+  lab_vendor:
+
 services:
   app:
     build:
@@ -7,6 +10,8 @@ services:
     working_dir: /labs/reflect_xss
     volumes:
       - ../:/labs/reflect_xss:delegated
+      # keep the image's composer vendor/ visible under the source bind mount (as in oauth-ato)
+      - lab_vendor:/labs/reflect_xss/vendor
       - ./storage/tmp:/tmp
   nginx:
     image: nginx:1.29
